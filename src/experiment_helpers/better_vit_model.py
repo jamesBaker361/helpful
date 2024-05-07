@@ -217,7 +217,6 @@ class BetterViTLayer(nn.Module):
         layer_output = self.output(layer_output, hidden_states)
 
         outputs = (layer_output,) + outputs
-
         return outputs
 
 
