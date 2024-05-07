@@ -3,31 +3,17 @@ from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import retri
 from accelerate import Accelerator
 from .static_globals import *
 from .better_vit_model import BetterViTModel
-import torch
-import random
-import string
-import nltk
-import os
-nltk.download('words')
-from nltk.corpus import words
-from training_loops import loop_vanilla,loop_general
-from inference import call_vanilla_with_dict
-import random
 import ImageReward as image_reward
-import string
-def generate_random_string(length):
-    return ''.join(random.choice(string.ascii_letters) for _ in range(length))
-reward_cache="/scratch/jlb638/reward_symbolic/"+generate_random_string(10)
+
 from transformers import CLIPProcessor, CLIPModel,ViTImageProcessor, ViTModel
 import numpy as np
 from numpy.linalg import norm
-import gc
 from .aesthetic_reward import get_aesthetic_scorer
-from custom_pipelines import T5UnetPipeline,T5TransformerPipeline,LlamaUnetPipeline
-from transformers import Blip2Processor, Blip2ForConditionalGeneration,pipeline,Blip2Model
+from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim as cos_sim_st
+import hpsv2
 
 def cos_sim(vector_i,vector_j)->float:
     return np.dot(vector_i,vector_j)/(norm(vector_i)*norm(vector_j))
