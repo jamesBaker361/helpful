@@ -32,7 +32,7 @@ class AestheticScorer(torch.nn.Module):
     This is from https://github.com/christophschuhmann/improved-aesthetic-predictor
     """
 
-    def __init__(self, *, dtype, model_id, model_filename):
+    def __init__(self, model_id:str="trl-lib/ddpo-aesthetic-predictor", model_filename:str="aesthetic-model.pth"):
         super().__init__()
         self.clip = CLIPModel.from_pretrained("openai/clip-vit-large-patch14")
         self.processor = CLIPProcessor.from_pretrained("openai/clip-vit-large-patch14")
@@ -43,38 +43,14 @@ class AestheticScorer(torch.nn.Module):
             cached_path = os.path.join(model_id, model_filename)
         state_dict = torch.load(cached_path,map_location=torch.device('cpu'))
         self.mlp.load_state_dict(state_dict)
-        self.dtype = dtype
         self.eval()
 
     @torch.no_grad()
     def __call__(self, images):
         device = next(self.parameters()).device
         inputs = self.processor(images=images, return_tensors="pt")
-        inputs = {k: v.to(self.dtype).to(device) for k, v in inputs.items()}
+        inputs = {k: v.to(device) for k, v in inputs.items()}
         embed = self.clip.get_image_features(**inputs)
         # normalize embedding
         embed = embed / torch.linalg.vector_norm(embed, dim=-1, keepdim=True)
         return self.mlp(embed).squeeze(1)
-    
-
-
-hf_hub_aesthetic_model_id="trl-lib/ddpo-aesthetic-predictor"
-hf_hub_aesthetic_model_filename="aesthetic-model.pth"
-
-def get_aesthetic_scorer(hub_model_id=hf_hub_aesthetic_model_id, model_filename=hf_hub_aesthetic_model_filename):
-    scorer = AestheticScorer(
-        model_id=hub_model_id,
-        model_filename=model_filename,
-        dtype=torch.float32,
-    )
-    #scorer = scorer.xpu() if is_xpu_available() else scorer.cuda() #disabled because running on cpu
-
-    def _fn(images):
-        try:
-            images=torch.from_numpy(np.array(images))
-        except:
-            pass
-        scores = scorer(images)
-        return scores
-
-    return _fn
