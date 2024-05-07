@@ -25,7 +25,7 @@ def get_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen:
     caption_out=blip_conditional_gen.generate(**caption_inputs)
     return blip_processor.decode(caption_out[0],skip_special_tokens=True).strip()
 
-def get_vit_embeddings(vit_processor: ViTImageProcessor, vit_model: BetterViTModel, image_list:list,return_numpy:True):
+def get_vit_embeddings(vit_processor: ViTImageProcessor, vit_model: BetterViTModel, image_list:list,return_numpy:bool=True):
     vit_inputs = vit_processor(images=image_list, return_tensors="pt")
     #print("inputs :)")
     vit_inputs['pixel_values']=vit_inputs['pixel_values'].to(vit_model.device)
