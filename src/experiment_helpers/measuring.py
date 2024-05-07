@@ -1,19 +1,17 @@
-from diffusers import StableDiffusionPipeline, UniPCMultistepScheduler,DPMSolverMultistepScheduler,DDPMScheduler,DDIMScheduler
-from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import retrieve_timesteps, rescale_noise_cfg
 from accelerate import Accelerator
 from .static_globals import *
 from .better_vit_model import BetterViTModel
 import ImageReward as image_reward
+import torch
 
 from transformers import CLIPProcessor, CLIPModel,ViTImageProcessor, ViTModel
 import numpy as np
 from numpy.linalg import norm
-from .aesthetic_reward import get_aesthetic_scorer
+from .aesthetic_reward import AestheticScorer
 from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from PIL import Image
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim as cos_sim_st
-import hpsv2
 
 def cos_sim(vector_i,vector_j)->float:
     return np.dot(vector_i,vector_j)/(norm(vector_i)*norm(vector_j))
@@ -29,20 +27,19 @@ def get_vit_embeddings(vit_processor: ViTImageProcessor, vit_model: BetterViTMod
     vit_inputs = vit_processor(images=image_list, return_tensors="pt")
     #print("inputs :)")
     vit_inputs['pixel_values']=vit_inputs['pixel_values'].to(vit_model.device)
-    vit_outputs=vit_model(**vit_inputs)
-    vit_embedding_list=vit_outputs.last_hidden_states.reshape(len(image_list),-1)
+    vit_outputs=vit_model(**vit_inputs,output_hidden_states=True, output_past_key_values=True)
+    vit_embedding_list=vit_outputs.last_hidden_state.reshape(len(image_list),-1)
     vit_style_embedding_list=[
-        hidden_states[0] for hidden_states in vit_outputs.last_hidden_states #CLS token: https://github.com/google/dreambooth/issues/3
+        hidden_states[0] for hidden_states in vit_outputs.last_hidden_state #CLS token: https://github.com/google/dreambooth/issues/3
     ]
-    vit_content_embedding_list=[
-        key_values[11][0].reshape(1,-1) for key_values in vit_outputs.past_key_values #in https://arxiv.org/pdf/2209.15264 they used the 11th layer for content so I guess we shall too
-    ]
+    vit_content_embedding_list=vit_outputs.past_key_values[11][0].reshape(len(image_list),-1)
     if return_numpy:
         vit_embedding_list=[v.cpu().numpy() for v in vit_embedding_list]
         vit_style_embedding_list=[v.cpu().numpy() for v in vit_style_embedding_list]
         vit_content_embedding_list=[v.cpu().numpy() for v in vit_content_embedding_list]
     return vit_embedding_list,vit_style_embedding_list, vit_content_embedding_list
 
+@torch.no_grad()
 def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,image_list:list,accelerator:Accelerator=None):
     metric_dict={}
     
@@ -153,7 +150,7 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,imag
     metric_dict[IMAGE_REWARD]=np.mean(
         [ir_model.score(evaluation_prompt,evaluation_image) for evaluation_prompt,evaluation_image in zip(evaluation_prompt_list, evaluation_image_list) ]
     )
-    aesthetic_scorer=get_aesthetic_scorer()
+    aesthetic_scorer=AestheticScorer()
     if accelerator is not None:
         aesthetic_scorer.to(accelerator.device)
         aesthetic_scorer=accelerator.prepare(aesthetic_scorer)
