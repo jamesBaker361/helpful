@@ -38,9 +38,9 @@ def get_vit_embeddings(vit_processor: ViTImageProcessor, vit_model: BetterViTMod
         #print("inputs :)")
         vit_inputs['pixel_values']=vit_inputs['pixel_values'].to(vit_model.device)
         vit_outputs=vit_model(**vit_inputs,output_hidden_states=True, output_past_key_values=True)
-        vit_embedding_list.append(vit_outputs.last_hidden_state.reshape(1,-1))
-        vit_style_embedding_list.append(vit_outputs.last_hidden_state[0]) #CLS token: https://github.com/google/dreambooth/issues/3
-        vit_content_embedding_list.append(vit_outputs.past_key_values[11][0].reshape(1,-1))
+        vit_embedding_list.append(vit_outputs.last_hidden_state.reshape(1,-1)[0])
+        vit_style_embedding_list.append(vit_outputs.last_hidden_state[0][0]) #CLS token: https://github.com/google/dreambooth/issues/3
+        vit_content_embedding_list.append(vit_outputs.past_key_values[11][0].reshape(1,-1)[0])
     if return_numpy:
         vit_embedding_list=[v.cpu().numpy() for v in vit_embedding_list]
         vit_style_embedding_list=[v.cpu().numpy() for v in vit_style_embedding_list]
