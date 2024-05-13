@@ -56,7 +56,10 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
     clip_inputs["input_ids"]=clip_inputs["input_ids"].to(clip_model.device)
     clip_inputs["pixel_values"]=clip_inputs["pixel_values"].to(clip_model.device)
     clip_inputs["attention_mask"]=clip_inputs["attention_mask"].to(clip_model.device)
-    clip_inputs["position_ids"]= clip_inputs["position_ids"].to(clip_model.device)
+    try:
+        clip_inputs["position_ids"]= clip_inputs["position_ids"].to(clip_model.device)
+    except:
+        pass
 
     clip_outputs = clip_model(**clip_inputs)
     src_image_n=len(src_image_list)
