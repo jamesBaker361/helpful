@@ -16,6 +16,10 @@ from facenet_pytorch import MTCNN
 from .elastic_face_iresnet import get_face_embedding,get_iresnet_model
 
 def cos_sim(vector_i,vector_j)->float:
+    if type(vector_i)==torch.Tensor:
+        vector_i=vector_i.cpu().detach()
+    if type(vector_j)==torch.Tensor:
+        vector_j=vector_j.cpu().detach()
     return np.dot(vector_i,vector_j)/(norm(vector_i)*norm(vector_j))
 
 def get_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen: Blip2ForConditionalGeneration):
