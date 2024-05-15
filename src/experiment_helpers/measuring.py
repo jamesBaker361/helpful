@@ -85,7 +85,10 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
 
     clip_outputs = clip_model(**clip_inputs)
     text_embed_list=clip_outputs.text_embeds.cpu().detach().numpy()
-    ir_model=image_reward.load("/scratch/jlb638/reward-blob",med_config="/scratch/jlb638/ImageReward/med_config.json")
+    device="cpu"
+    if accelerator is not None:
+        device=accelerator.device
+    ir_model=image_reward.load("/scratch/jlb638/reward-blob",med_config="/scratch/jlb638/ImageReward/med_config.json",device=device)
 
     identity_consistency_list=[]
     target_similarity_list=[]
@@ -186,11 +189,15 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
     )
 
     if use_face:
-        mtcnn=MTCNN(device=accelerator.device)
-        mtcnn.requires_grad_(True)
+        '''if accelerator is not None:
+            mtcnn=MTCNN(device=accelerator.device)
+            iresnet=get_iresnet_model(accelerator.device)
+            mtcnn,iresnet=accelerator.prepare(mtcnn,iresnet)
+        else:'''
+        mtcnn=MTCNN(device="cpu") #thinking that maybe these get too big for most GPUs???
+        iresnet=get_iresnet_model("cpu")
+        mtcnn.requires_grad_(False)
         mtcnn.eval()
-        iresnet=get_iresnet_model(accelerator.device)
-        mtcnn,iresnet=accelerator.prepare(mtcnn,iresnet)
         image_face_embedding_list=[get_face_embedding([evaluation_image],mtcnn,iresnet,10)[0] for evaluation_image in evaluation_image_list]
         src_face_embedding_list=[get_face_embedding([src_image],mtcnn,iresnet,10)[0] for src_image in src_image_list]
         face_consistency_list=[]
