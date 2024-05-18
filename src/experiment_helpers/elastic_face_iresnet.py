@@ -262,7 +262,7 @@ def preprocess_iresnet(
         ]
     max_value=torch.max(images[0])
     min_value=torch.min(images[0])
-    print('processed min max',min_value,max_value)
+    #print('processed min max',min_value,max_value)
     return torch.stack(images).to(device)
 
 def get_face_embedding(images:list,mtcnn:MTCNN, iresnet:IResNet,margin:int)->torch.tensor:
