@@ -8,6 +8,14 @@ from facenet_pytorch import MTCNN, InceptionResnetV1,extract_face
 
 __all__ = ['iresnet18', 'iresnet34', 'iresnet50', 'iresnet100']
 
+def rescale_around_zero(image_tensor:torch.Tensor)->torch.Tensor:
+    max_value=torch.max(image_tensor)
+    min_value=torch.min(image_tensor)
+    if max_value >1 and min_value>=0: #in range 0-255
+        image_tensor=(image_tensor -128)/128
+    elif min_value>=0 and max_value<=1.0: #in range 0-1
+        image_tensor=(image_tensor -0.5)/0.5
+    return image_tensor
 
 def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
     """3x3 convolution with padding"""
@@ -249,19 +257,7 @@ def preprocess_iresnet(
         CustomPILToTensor()
     ])
     images=[composition(i).to(torch.float32) for i in images]
-    max_value=torch.max(images[0])
-    min_value=torch.min(images[0])
-    #print('initial min max',min_value,max_value)
-    if max_value >1 and min_value>=0: #in range 0-255
-        images=[
-            (i -128)/128 for i in images
-        ]
-    elif min_value>=0 and max_value<=1.0: #in range 0-1
-        images=[
-            (i -0.5)/0.5 for i in images
-        ]
-    max_value=torch.max(images[0])
-    min_value=torch.min(images[0])
+    images=[rescale_around_zero(i) for i in images]
     #print('processed min max',min_value,max_value)
     return torch.stack(images).to(device)
 
