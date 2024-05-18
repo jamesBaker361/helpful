@@ -251,7 +251,7 @@ def preprocess_iresnet(
     images=[composition(i).to(torch.float32) for i in images]
     max_value=torch.max(images[0])
     min_value=torch.min(images[0])
-    print('initial min max',min_value,max_value)
+    #print('initial min max',min_value,max_value)
     if max_value >1 and min_value>=0: #in range 0-255
         images=[
             (i -128)/128 for i in images
