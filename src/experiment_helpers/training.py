@@ -8,6 +8,7 @@ from torchvision.transforms import PILToTensor
 from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer, CLIPVisionModelWithProjection
 import torch.nn.functional as F
 from tqdm.auto import tqdm
+import time
 
 def pil_to_tensor_process(image:Image):
     tensor=PILToTensor()(image)
@@ -132,7 +133,7 @@ def train_unet(pipeline:StableDiffusionPipeline,
     '''print('unet device',unet.device)
     print('vae device',vae.device)
     print('text encoder device',text_encoder.device )'''
-    
+    start=time.time()
     for e in range(epochs):
         unet.train()
         for images,prompts in zip(training_image_data, training_prompts_data):
@@ -193,5 +194,6 @@ def train_unet(pipeline:StableDiffusionPipeline,
                 optimizer.zero_grad()
         if accelerator.sync_gradients:
             progress_bar.update(1)
-
+    end=time.time()
+    print(f"trained unet! time elapsed: {end-start}")
     return pipeline
