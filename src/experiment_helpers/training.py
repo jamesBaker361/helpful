@@ -141,6 +141,7 @@ def train_unet(pipeline:StableDiffusionPipeline,
                 '''if use_prior_preservation:
                     images,prior_images=images.chunk(2)
                     prompts,prior_prompts=images.chunk(2)'''
+                images=images.to(vae.device)
                 model_input = vae.encode(images).latent_dist.sample()
                 model_input = model_input * vae.config.scaling_factor
                 model_input=model_input.to(unet.device)
