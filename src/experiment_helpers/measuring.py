@@ -14,6 +14,7 @@ from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim as cos_sim_st
 from facenet_pytorch import MTCNN
 from .elastic_face_iresnet import get_face_embedding,get_iresnet_model
+import wandb
 
 def cos_sim(vector_i,vector_j)->float:
     if type(vector_i)==torch.Tensor:
@@ -214,3 +215,24 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
         if metric not in metric_dict:
             metric_dict[metric]=0.0
     return metric_dict
+
+def print_tables(run_id_dict:dict,key_list:list,project:str )->None:
+    api=wandb.Api(timeout=60)
+    print(" & ".join(key_list),"\\\\")
+    for name,run_id_list in run_id_dict.items():
+        metric_dict={
+            key:[] for key in key_list
+        }
+        for run_id in run_id_list:
+            try:
+                run=api.run(f"jlbaker361/{project}/{run_id}")
+                for key in key_list:
+                    try:
+                        history=run.history(keys=[key])
+                        metric_dict[key].append(history[key][0])
+                    except:
+                        print(f"couldnt find key {key} for name {name} and {run_id}")
+            except:
+                pass
+        #print(metric_dict)
+        print(name.replace("_", " "), "&", " & ".join([f"{round(np.mean(metric_dict[key]),4)}" for key in metric_dict.keys()]),"\\\\")
