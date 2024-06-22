@@ -6,6 +6,8 @@ from PIL import Image
 from torchvision.transforms import PILToTensor,Compose,Resize
 from facenet_pytorch import MTCNN, InceptionResnetV1,extract_face
 
+#credits to https://github.com/fdbtrs/ElasticFace/tree/main
+
 __all__ = ['iresnet18', 'iresnet34', 'iresnet50', 'iresnet100']
 
 def rescale_around_zero(image_tensor:torch.Tensor)->torch.Tensor:
