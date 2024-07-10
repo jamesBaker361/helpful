@@ -584,7 +584,7 @@ class BetterDDPOTrainer(BaseTrainer):
                     info = {k: torch.mean(torch.stack(v)) for k, v in info.items()}
                     info = self.accelerator.reduce(info, reduction="mean")
                     info.update({"epoch": epoch, "inner_epoch": inner_epoch})
-                    self.accelerator.log(info, step=global_step)
+                    self.accelerator.log(info)
                     global_step += 1
                     info = defaultdict(list)
         return global_step
