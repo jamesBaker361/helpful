@@ -5,7 +5,7 @@ from safetensors import safe_open
 from safetensors.torch import save_file
 from peft import get_peft_model_state_dict
 from huggingface_hub import HfApi,snapshot_download,create_repo
-from src.experiment_helpers.better_ddpo_pipeline import BetterDefaultDDPOStableDiffusionPipeline
+from .better_ddpo_pipeline import BetterDefaultDDPOStableDiffusionPipeline
 from huggingface_hub import hf_hub_download
 
 def save_lora_weights(pipeline:DefaultDDPOStableDiffusionPipeline,output_dir:str):
