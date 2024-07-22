@@ -4,12 +4,18 @@ import numpy as np
 import wandb
 
 def get_run_id(project_name,file_path):
+    run_id=None
     with open(file_path, 'r') as file:
         for line in file:
             if line.find(f"https://wandb.ai/jlbaker361/{project_name}/runs/")!=-1:
-                run_id=line[line.rfind("/")+1:]
-                return run_id.strip()
-    print("couldn't find run id!")
+                run_id=line[line.rfind("/")+1:].strip()
+            if line.find("DUE TO TIME LIMIT")!=-1:
+                print('Out of Time', file_path)
+            if line.find("CANCELLED AT")!=-1:
+                print("Cancelled", file_path)
+    if run_id is None:
+        print("couldn't find run id!")
+    return run_id
 
 def get_grouping_dict(project_name:str,file_path_format:str,key_value_dict:dict, grouping_keys:list)-> dict:
     assert all(key in key_value_dict for key in grouping_keys)
