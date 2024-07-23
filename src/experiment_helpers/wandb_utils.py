@@ -9,8 +9,6 @@ def get_run_id(project_name,file_path):
         for line in file:
             if line.find(f"https://wandb.ai/jlbaker361/{project_name}/runs/")!=-1:
                 run_id=line[line.rfind("/")+1:].strip()
-            if line.find("DUE TO TIME LIMIT")!=-1:
-                print('Out of Time', file_path)
             if line.find("CANCELLED AT")!=-1:
                 print("Cancelled", file_path)
     if run_id is None:
@@ -44,7 +42,7 @@ def get_grouping_dict(project_name:str,file_path_format:str,key_value_dict:dict,
         run_id=get_run_id(project_name,file_path)
         
         group_id="_".join([combo_dict[key] for key in grouping_keys])
-        print(file_path,run_id,group_id)
+        print('\t',file_path,run_id,group_id)
         grouping_dict[group_id].append(run_id)
     
     return grouping_dict
