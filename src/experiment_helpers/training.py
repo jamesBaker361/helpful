@@ -86,12 +86,13 @@ def train_unet(pipeline:StableDiffusionPipeline,
     initial_vae_device=vae.device
     vae=vae.to(unet.device)
     pipeline("do this to instantiate things",num_inference_steps=1)
+    width,height=training_image_list[0].size
     if use_prior_preservation:
         #prior_prompt_list=[p.format(prior_class) for p in training_prompt_list]
         prior_prompt_list=[encode_prompt(text_encoder,tokenizer,p.format(prior_class)) for p in training_prompt_list]
         training_prompt_list=[encode_prompt(text_encoder,tokenizer,p.format(f"{entity_name} {prior_class}")) for p in training_prompt_list]
         prior_image_list=[
-            pil_to_tensor_process(pipeline(prompt_embeds=prompt_embeds,num_inference_steps=num_inference_steps,safety_checker=None).images[0])
+            pil_to_tensor_process(pipeline(prompt_embeds=prompt_embeds,num_inference_steps=num_inference_steps,safety_checker=None,width=width,height=height).images[0])
             for prompt_embeds in prior_prompt_list
         ]
         training_image_list=[

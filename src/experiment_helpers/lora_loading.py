@@ -3,10 +3,13 @@ import os
 
 from safetensors import safe_open
 from safetensors.torch import save_file
-from peft import get_peft_model_state_dict
+from peft import get_peft_model_state_dict, PeftConfig
 from huggingface_hub import HfApi,snapshot_download,create_repo
 from .better_ddpo_pipeline import BetterDefaultDDPOStableDiffusionPipeline
 from huggingface_hub import hf_hub_download
+import json
+from huggingface_hub import HfApi
+
 
 def save_lora_weights(pipeline:DefaultDDPOStableDiffusionPipeline,output_dir:str):
     state_dict=get_peft_model_state_dict(pipeline.sd_pipeline.unet, unwrap_compiled=True)
@@ -69,3 +72,27 @@ def get_pipeline_from_hf(hf_model_id:str,train_text_encoder:bool,
     pipeline.sd_pipeline.vae.to(device)
     print(f"loaded from {hf_model_id}")
     return pipeline
+
+def fix_lora_weights(hf_model_id:str, config_id:str="jlbaker361/adapter_test_model"):
+    json_path=hf_hub_download(repo_id=config_id,filename="adapter_config.json",repo_type="model")
+    api = HfApi()
+    api.upload_file(
+        path_or_fileobj=json_path,
+        path_in_repo="adapter_config.json",
+        repo_id=hf_model_id,
+        repo_type="model",
+    )
+    path=hf_hub_download(repo_id=hf_model_id, filename="pytorch_lora_weights.safetensors",repo_type="model")
+    state_dict={}
+    count=0
+    with safe_open(path, framework="pt", device="cpu") as f:
+        for key in f.keys():
+            state_dict["base_model.model."+key]=f.get_tensor(key)
+    weight_path="temp_adapter.safetensors"
+    save_file(state_dict, weight_path)
+    api.upload_file(
+        path_or_fileobj=weight_path,
+        path_in_repo="adapter_model.safetensors",
+        repo_id=hf_model_id,
+        repo_type="model"
+    )
