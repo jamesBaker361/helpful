@@ -6,6 +6,7 @@ from safetensors.torch import save_file
 from peft import get_peft_model_state_dict, PeftConfig
 from huggingface_hub import HfApi,snapshot_download,create_repo
 from .better_ddpo_pipeline import BetterDefaultDDPOStableDiffusionPipeline
+from .utils import print_trainable_parameters
 from huggingface_hub import hf_hub_download
 import json
 from huggingface_hub import HfApi
@@ -24,16 +25,22 @@ def load_lora_weights(pipeline:DefaultDDPOStableDiffusionPipeline,path:str):
     count=0
     with safe_open(path, framework="pt", device="cpu") as f:
         for key in f.keys():
+            #print(key)
             state_dict[key]=f.get_tensor(key)
-    state_dict={
+    print([k for k in f.keys()])
+    '''state_dict={
         k.replace("weight","default.weight"):v for k,v in state_dict.items()
-    }
+    }'''
+    print_trainable_parameters(pipeline.sd_pipeline.unet)
     param_set=set([p[0] for p in pipeline.sd_pipeline.unet.named_parameters()])
+    #print('param_set')
+    print(param_set)
     for k in state_dict.keys():
         if k in param_set:
             count+=1
     print(f"loaded {count} params")
     pipeline.sd_pipeline.unet.load_state_dict(state_dict,strict=False)
+    print_trainable_parameters(pipeline.sd_pipeline.unet)
     print("successfully loaded")
 
 def save_pipeline_hf(pipeline:DefaultDDPOStableDiffusionPipeline, hub_model_id:str,temp_dir="/scratch/jlb638/temp_ddpo"):
