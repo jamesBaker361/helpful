@@ -7,12 +7,15 @@ import wandb
 
 def get_run_id(project_name,file_path):
     run_id=None
-    with open(file_path, 'r') as file:
-        for line in file:
-            if line.find(f"https://wandb.ai/jlbaker361/{project_name}/runs/")!=-1:
-                run_id=line[line.rfind("/")+1:].strip()
-            if line.find("CANCELLED AT")!=-1:
-                print("Cancelled", file_path)
+    try:
+        with open(file_path, 'r') as file:
+            for line in file:
+                if line.find(f"https://wandb.ai/jlbaker361/{project_name}/runs/")!=-1:
+                    run_id=line[line.rfind("/")+1:].strip()
+                if line.find("CANCELLED AT")!=-1:
+                    print("Cancelled", file_path)
+    except:
+        pass
     if run_id is None:
         print("couldn't find run id!")
     return run_id
