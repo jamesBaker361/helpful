@@ -18,7 +18,7 @@ def save_lora_weights(pipeline:DefaultDDPOStableDiffusionPipeline,output_dir:str
     print("saving to ",weight_path)
     save_file(state_dict, weight_path, metadata={"format": "pt"})
 
-def load_lora_weights(pipeline:DefaultDDPOStableDiffusionPipeline,path:str):
+def load_lora_weights(pipeline:DefaultDDPOStableDiffusionPipeline,path:str,swap_pair:list=[]):
     #pipeline.get_trainable_layers()
     print("loading from ",path)
     state_dict={}
@@ -27,14 +27,18 @@ def load_lora_weights(pipeline:DefaultDDPOStableDiffusionPipeline,path:str):
         for key in f.keys():
             #print(key)
             state_dict[key]=f.get_tensor(key)
-    print([k for k in f.keys()])
+        #print([k for k in f.keys()])
     '''state_dict={
         k.replace("weight","default.weight"):v for k,v in state_dict.items()
     }'''
+    if len(swap_pair)>0:
+        state_dict={
+        k.replace(swap_pair[0],swap_pair[1]):v for k,v in state_dict.items()
+        }
     print_trainable_parameters(pipeline.sd_pipeline.unet)
     param_set=set([p[0] for p in pipeline.sd_pipeline.unet.named_parameters()])
     #print('param_set')
-    print(param_set)
+    #Sprint(param_set)
     for k in state_dict.keys():
         if k in param_set:
             count+=1
