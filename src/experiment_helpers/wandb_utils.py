@@ -17,7 +17,7 @@ def get_run_id(project_name,file_path):
     except:
         pass
     if run_id is None:
-        print("couldn't find run id!")
+        print("couldn't find run id!",file_path)
     return run_id
 
 def get_grouping_dict(project_name:str,file_path_format:str,key_value_dict:dict, grouping_keys:list)-> dict:
@@ -95,19 +95,22 @@ def make_grid(project_name:str,
                 key=f"{method}_{suffix}"
                 run_id_list= gd[key]
                 for normal_run in run_id_list:
-                    run=api.run(f"jlbaker361/{project_name}/{normal_run}")
-                    for file in run.files():
-                        if file.mimetype=="image/png":
-                            query_string=f"media/images/{target}/{method}_{prompt_id}"
-                            if file.name.find(query_string)!=-1:
-                                image_path=file.name
-                                print(query_string, image_path)
-                                file.download(exist_ok=True)
-                                with Image.open(image_path) as img:
-                                    # Resize image
-                                    img = img.resize(size)
-                                    new_row.append(img)
-                                    break
+                    try:
+                        run=api.run(f"jlbaker361/{project_name}/{normal_run}")
+                        for file in run.files():
+                            if file.mimetype=="image/png":
+                                query_string=f"media/images/{target}/{method}_{prompt_id}"
+                                if file.name.find(query_string)!=-1:
+                                    image_path=file.name
+                                    print(query_string, image_path)
+                                    file.download(exist_ok=True)
+                                    with Image.open(image_path) as img:
+                                        # Resize image
+                                        img = img.resize(size)
+                                        new_row.append(img)
+                                        break
+                    except:
+                        pass
             grid.append(new_row)
             print(target, new_row)
     return grid
