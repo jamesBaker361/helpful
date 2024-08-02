@@ -50,7 +50,7 @@ def get_vit_embeddings(vit_processor: ViTImageProcessor, vit_model: BetterViTMod
 
 @torch.no_grad()
 def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_image_list:list,accelerator:Accelerator=None,
-                    use_face:bool=False)->dict:
+                    use_face:bool=False,)->dict:
     metric_dict={}
     
     clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").eval()

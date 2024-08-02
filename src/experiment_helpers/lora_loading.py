@@ -67,7 +67,8 @@ def get_pipeline_from_hf(hf_model_id:str,train_text_encoder:bool,
                   use_lora_text_encoder:bool,
                   use_lora:bool,
                   pretrained_model_name:str="runwayml/stable-diffusion-v1-5",
-                  device="cpu"):
+                  device="cpu",
+                  swap_pair:list=[]):
     pipeline=BetterDefaultDDPOStableDiffusionPipeline(
         train_text_encoder,
         train_text_encoder_embeddings,
@@ -77,7 +78,7 @@ def get_pipeline_from_hf(hf_model_id:str,train_text_encoder:bool,
         pretrained_model_name=pretrained_model_name
     )
     weight_path=hf_hub_download(repo_id=hf_model_id, filename="pytorch_lora_weights.safetensors",repo_type="model")
-    load_lora_weights(pipeline,weight_path)
+    load_lora_weights(pipeline,weight_path,swap_pair)
     pipeline.sd_pipeline.unet.to(device)
     pipeline.sd_pipeline.text_encoder.to(device)
     pipeline.sd_pipeline.vae.to(device)
