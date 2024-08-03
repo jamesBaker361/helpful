@@ -55,12 +55,16 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
     
     clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").eval()
     clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
+    fashion_clip_processor=CLIPProcessor.from_pretrained("patrickjohncyh/fashion-clip")
+    fashion_clip_model=CLIPModel.from_pretrained("patrickjohncyh/fashion-clip").eval()
     if accelerator is not None:
         clip_model.to(accelerator.device)
         clip_model=accelerator.prepare(clip_model)
     evaluation_image_embed_list=[]
+    evaluation_image_fashion_embed_list=[]
     text_embed_list=[]
     src_image_embed_list=[]
+    src_image_fashion_embed_list=[]
     for images,image_embed_list in zip([evaluation_image_list, src_image_list], [evaluation_image_embed_list, src_image_embed_list]):
         for image in images:
             clip_inputs=clip_processor(text=[" "], images=[image], return_tensors="pt", padding=True)
@@ -74,6 +78,21 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
 
             clip_outputs = clip_model(**clip_inputs)
             image_embed_list.append(clip_outputs.image_embeds.detach().cpu().numpy()[0])
+
+    for images,image_embed_list in zip([evaluation_image_list, src_image_list], [evaluation_image_fashion_embed_list, src_image_fashion_embed_list]):
+        for image in images:
+            fashion_clip_inputs=fashion_clip_processor(text=[" "], images=[image], return_tensors="pt", padding=True)
+            fashion_clip_inputs["input_ids"]=fashion_clip_inputs["input_ids"].to(fashion_clip_model.device)
+            fashion_clip_inputs["pixel_values"]=fashion_clip_inputs["pixel_values"].to(fashion_clip_model.device)
+            fashion_clip_inputs["attention_mask"]=fashion_clip_inputs["attention_mask"].to(fashion_clip_model.device)
+            try:
+                fashion_clip_inputs["position_ids"]= fashion_clip_inputs["position_ids"].to(fashion_clip_model.device)
+            except:
+                pass
+
+            fashion_clip_outputs = fashion_clip_model(**fashion_clip_inputs)
+            fashion_embedding=fashion_clip_outputs.image_embeds.detach().cpu().numpy()[0]
+            image_embed_list.append(fashion_embedding)
     
     clip_inputs=clip_processor(text=evaluation_prompt_list, images=[image], return_tensors="pt", padding=True)
     clip_inputs["input_ids"]=clip_inputs["input_ids"].to(clip_model.device)
@@ -106,9 +125,21 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
             sim=cos_sim(image_embed,vector_j)
             identity_consistency_list.append(sim)
 
+    fashion_consistency_list=[]
+    fashion_similarity_list=[]
+    for i in range(len(evaluation_image_fashion_embed_list)):
+        fashion_image_embed=evaluation_image_fashion_embed_list[i]
+        for fashion_src_embed in src_image_fashion_embed_list:
+            fashion_similarity_list.append(cos_sim(fashion_image_embed, fashion_src_embed))
+        for j in range(i+1, len(evaluation_image_fashion_embed_list) ):
+            fashion_consistency_list.append(cos_sim(fashion_image_embed,evaluation_image_fashion_embed_list[j] ))
+
     metric_dict[IDENTITY_CONSISTENCY]=np.mean(identity_consistency_list)
     metric_dict[TARGET_SIMILARITY]=np.mean(target_similarity_list)
     metric_dict[PROMPT_SIMILARITY]=np.mean(prompt_similarity_list)
+
+    metric_dict[FASHION_CONSISTENCY]=np.mean(fashion_consistency_list)
+    metric_dict[FASHION_SIMILARITY]=np.mean(fashion_similarity_list)
 
     blip_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
     blip_conditional_gen = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b").eval()
