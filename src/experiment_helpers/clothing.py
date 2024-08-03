@@ -91,7 +91,7 @@ class BetterUnet(Unet):
             print(f.size())
 
     @torch.no_grad()
-    def decoder_embeds(self,x)->torch.Tenssor:
+    def decoder_embeds(self,x)->torch.Tensor:
         self.check_input_shape(x)
 
         features = self.encoder(x)
@@ -99,7 +99,6 @@ class BetterUnet(Unet):
 def get_segmentation_model(device:str,dtype:torch.dtype)->BetterUnet:
     parent = create_model("Unet_2020-10-30")
     return BetterUnet(parent,device,dtype)
-
 
 def pad_to_multiple_of_32(image_tensor: torch.Tensor):
     _, _, h, w = image_tensor.size()
@@ -132,9 +131,10 @@ def process_image(image: Image.Image,device:str,dtype:torch.dtype)->tuple[torch.
 
 def get_mask(tensor_img:torch.Tensor,segmentation_model:BetterUnet,threshold:int)->torch.Tensor:
     prediction = segmentation_model(tensor_img)
-    segmentation_model.predict_embeds(tensor_img)
+    #segmentation_model.predict_embeds(tensor_img)
     #print(prediction.size())
     #print(torch.max(prediction),torch.min(prediction))
+    print(torch.mean(prediction),torch.max(prediction),torch.min(prediction))
     mask=(prediction > threshold).to(torch.uint8)
     return mask
 
