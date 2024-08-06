@@ -3,7 +3,7 @@ from torch import nn
 import numpy as np
 import torchvision.transforms.functional as F
 from PIL import Image
-from torchvision.transforms import PILToTensor,Compose,Resize
+from torchvision.transforms import PILToTensor,Compose,Resize,ToPILImage
 from facenet_pytorch import MTCNN, InceptionResnetV1,extract_face
 
 #credits to https://github.com/fdbtrs/ElasticFace/tree/main
@@ -275,6 +275,21 @@ def get_face_embedding(images:list,mtcnn:MTCNN, iresnet:IResNet,margin:int)->tor
 
     iresnet_input=preprocess_iresnet(face_tensors,mtcnn.device)
     return iresnet(iresnet_input)
+
+def face_mask(image:Image.Image,mtcnn:MTCNN,margin:int)->Image.Image:
+    image_tensor=PILToTensor()(image)
+    mask = torch.zeros_like(image_tensor)
+    boxes, probs=mtcnn.detect(image)
+    if boxes is not None:
+        bbox=boxes[0]
+        #print(bbox)
+        x_min, y_min, x_max, y_max = bbox
+        mask[:, int(y_min)-margin:int(y_max)+margin, int(x_min)-margin:int(x_max)+margin] = 1
+    masked_image_tensor = image_tensor * mask
+    masked_image=ToPILImage()(masked_image_tensor)
+    return masked_image
+    
+
 
 
 if __name__ == "__main__":

@@ -13,8 +13,14 @@ from PIL import Image
 from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim as cos_sim_st
 from facenet_pytorch import MTCNN
-from .elastic_face_iresnet import get_face_embedding,get_iresnet_model
+from .elastic_face_iresnet import get_face_embedding,get_iresnet_model,face_mask
+from .clothing import clothes_segmentation,BetterUnet
 import wandb
+import random, string
+
+def randomword(length):
+    letters = string.ascii_lowercase
+    return ''.join(random.choice(letters) for i in range(length))
 
 def cos_sim(vector_i,vector_j)->float:
     if type(vector_i)==torch.Tensor:
@@ -29,6 +35,16 @@ def get_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen:
         caption_inputs[name]=caption_inputs[name].to(blip_conditional_gen.device)
     caption_out=blip_conditional_gen.generate(**caption_inputs)
     return blip_processor.decode(caption_out[0],skip_special_tokens=True).strip()
+
+def get_face_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen: Blip2ForConditionalGeneration,mtcnn:MTCNN,margin:int)->str:
+    face_image=face_mask(image,mtcnn,margin)
+    #face_image.save(randomword(3)+"_face.jpg")
+    return get_caption(face_image, blip_processor, blip_conditional_gen)
+
+def get_fashion_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen: Blip2ForConditionalGeneration,segmentation_model:BetterUnet,threshold:int)->str:
+    fashion_image=clothes_segmentation(image,segmentation_model,threshold)
+    #fashion_image.save(randomword(3)+"_fashion.jpg")
+    return get_caption(fashion_image, blip_processor, blip_conditional_gen)
 
 def get_vit_embeddings(vit_processor: ViTImageProcessor, vit_model: BetterViTModel, image_list:list,return_numpy:bool=True):
     vit_embedding_list=[]

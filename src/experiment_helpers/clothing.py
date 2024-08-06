@@ -75,12 +75,13 @@ class BetterUnetDecoder(UnetDecoder):
 
 class BetterUnet(Unet):
     def __init__(self, parent:Unet,device:str, dtype:torch.dtype):
-        self.device=device
-        self.dtype=dtype
+        
         parent=parent.to(device)
         parent=parent.to(dtype)
         for key, value in parent.__dict__.items():
             setattr(self, key, value)
+        self.device=device
+        self.dtype=dtype
 
     @torch.no_grad()
     def predict_embeds(self,x)->list:
@@ -125,7 +126,7 @@ def process_image(image: Image.Image,device:str,dtype:torch.dtype)->tuple[torch.
     
     #tensor_img,padding=pad_to_multiple_of_32(tensor_img)
     if device is not None:
-        tensor_img.to(device)
+        tensor_img=tensor_img.to(device)
     return tensor_img,base_image,padding
 
 
@@ -134,7 +135,7 @@ def get_mask(tensor_img:torch.Tensor,segmentation_model:BetterUnet,threshold:int
     #segmentation_model.predict_embeds(tensor_img)
     #print(prediction.size())
     #print(torch.max(prediction),torch.min(prediction))
-    print(torch.mean(prediction),torch.max(prediction),torch.min(prediction))
+    #print(torch.mean(prediction),torch.max(prediction),torch.min(prediction))
     mask=(prediction > threshold).to(torch.uint8)
     return mask
 
@@ -142,6 +143,6 @@ def get_mask(tensor_img:torch.Tensor,segmentation_model:BetterUnet,threshold:int
 def clothes_segmentation(image: Image.Image,segmentation_model:BetterUnet,threshold:int)->Image.Image:
     tensor_img,base_image,padding=process_image(image,segmentation_model.device,segmentation_model.dtype)
     mask=get_mask(tensor_img,segmentation_model,threshold)
-    masked_tensor=base_image*mask
+    masked_tensor=base_image.to("cpu")*mask.to("cpu")
     unpadded_masked_tensor=unpad_image(masked_tensor,padding)
     return ToPILImage()(unpadded_masked_tensor.squeeze(0))
