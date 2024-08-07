@@ -146,3 +146,5 @@ def clothes_segmentation(image: Image.Image,segmentation_model:BetterUnet,thresh
     masked_tensor=base_image.to("cpu")*mask.to("cpu")
     unpadded_masked_tensor=unpad_image(masked_tensor,padding)
     return ToPILImage()(unpadded_masked_tensor.squeeze(0))
+
+
