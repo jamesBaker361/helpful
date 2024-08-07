@@ -17,6 +17,8 @@ from .elastic_face_iresnet import get_face_embedding,get_iresnet_model,face_mask
 from .clothing import clothes_segmentation,BetterUnet
 import wandb
 import random, string
+from dreamsim import dreamsim
+
 
 def randomword(length):
     letters = string.ascii_lowercase
@@ -71,8 +73,7 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
     
     clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32").eval()
     clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
-    fashion_clip_processor=CLIPProcessor.from_pretrained("patrickjohncyh/fashion-clip")
-    fashion_clip_model=CLIPModel.from_pretrained("patrickjohncyh/fashion-clip").eval()
+    
     if accelerator is not None:
         clip_model.to(accelerator.device)
         clip_model=accelerator.prepare(clip_model)
@@ -95,6 +96,21 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
             clip_outputs = clip_model(**clip_inputs)
             image_embed_list.append(clip_outputs.image_embeds.detach().cpu().numpy()[0])
 
+    clip_inputs=clip_processor(text=evaluation_prompt_list, images=[image], return_tensors="pt", padding=True)
+    clip_inputs["input_ids"]=clip_inputs["input_ids"].to(clip_model.device)
+    clip_inputs["pixel_values"]=clip_inputs["pixel_values"].to(clip_model.device)
+    clip_inputs["attention_mask"]=clip_inputs["attention_mask"].to(clip_model.device)
+    try:
+        clip_inputs["position_ids"]= clip_inputs["position_ids"].to(clip_model.device)
+    except:
+        pass
+
+    clip_outputs = clip_model(**clip_inputs)
+    text_embed_list=clip_outputs.text_embeds.cpu().detach().numpy()
+
+    fashion_clip_processor=CLIPProcessor.from_pretrained("patrickjohncyh/fashion-clip")
+    fashion_clip_model=CLIPModel.from_pretrained("patrickjohncyh/fashion-clip").eval()
+
     for images,image_embed_list in zip([evaluation_image_list, src_image_list], [evaluation_image_fashion_embed_list, src_image_fashion_embed_list]):
         for image in images:
             fashion_clip_inputs=fashion_clip_processor(text=[" "], images=[image], return_tensors="pt", padding=True)
@@ -110,17 +126,7 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
             fashion_embedding=fashion_clip_outputs.image_embeds.detach().cpu().numpy()[0]
             image_embed_list.append(fashion_embedding)
     
-    clip_inputs=clip_processor(text=evaluation_prompt_list, images=[image], return_tensors="pt", padding=True)
-    clip_inputs["input_ids"]=clip_inputs["input_ids"].to(clip_model.device)
-    clip_inputs["pixel_values"]=clip_inputs["pixel_values"].to(clip_model.device)
-    clip_inputs["attention_mask"]=clip_inputs["attention_mask"].to(clip_model.device)
-    try:
-        clip_inputs["position_ids"]= clip_inputs["position_ids"].to(clip_model.device)
-    except:
-        pass
-
-    clip_outputs = clip_model(**clip_inputs)
-    text_embed_list=clip_outputs.text_embeds.cpu().detach().numpy()
+    
     device="cpu"
     if accelerator is not None:
         device=accelerator.device
@@ -173,6 +179,7 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
     src_blip_embedding_list=embedding_model.encode(src_blip_caption_list)
     image_blip_embedding_list=embedding_model.encode(image_blip_caption_list)
     evaluation_blip_embedding_list=embedding_model.encode(evaluation_prompt_list)
+
 
     metric_dict[BLIP_TARGET_CAPTION_SIMILARITY]=np.mean(cos_sim_st(src_blip_embedding_list, image_blip_embedding_list).cpu().detach().numpy())
     metric_dict[BLIP_PROMPT_CAPTION_SIMILARITY]=np.mean(
@@ -235,6 +242,36 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
     metric_dict[AESTHETIC_SCORE]=np.mean(
         [aesthetic_scorer(evaluation_image).cpu().numpy()[0] for evaluation_image in evaluation_image_list]
     )
+
+    if accelerator is not None:
+        accelerator.free_memory()
+
+    torch.cuda.empty_cache()
+
+    dream_model, dream_preprocess = dreamsim(pretrained=True,cache_dir="/scratch/jlb638/dreamsim",device=device)
+    evaluation_image_dream_embed_list=[]
+    src_image_dream_embed_list=[]
+    for images,image_embed_list in zip([evaluation_image_list, src_image_list], [evaluation_image_dream_embed_list, src_image_dream_embed_list]):
+        for image in images:
+            preprocessed=dream_preprocess(image)
+            embedding=dream_model.embed(preprocessed)
+            images.append(embedding)
+
+    dream_consistency_list=[]
+    dream_similarity_list=[]
+
+    for i in range(len(evaluation_image_list)):
+        embedding=evaluation_image_dream_embed_list[i]
+        for k in range(len(range(src_image_list))):
+            src_embedding=src_image_dream_embed_list[k]
+            dream_similarity_list.append(cos_sim(embedding,src_embedding))
+        for j in range(i+1, len(evaluation_image_list)):
+            dream_consistency_list.append(cos_sim(embedding, evaluation_image_dream_embed_list[j]))
+    
+    metric_dict[DREAM_CONSISTENCY]=np.mean(dream_consistency_list)
+    metric_dict[DREAM_SIMILARITY]=np.mean(dream_similarity_list)
+
+
 
     if use_face:
         '''if accelerator is not None:
