@@ -254,15 +254,15 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
     for images,image_embed_list in zip([evaluation_image_list, src_image_list], [evaluation_image_dream_embed_list, src_image_dream_embed_list]):
         for image in images:
             preprocessed=dream_preprocess(image)
-            embedding=dream_model.embed(preprocessed)
-            images.append(embedding)
+            embedding=dream_model.embed(preprocessed)[0]
+            image_embed_list.append(embedding)
 
     dream_consistency_list=[]
     dream_similarity_list=[]
 
     for i in range(len(evaluation_image_list)):
         embedding=evaluation_image_dream_embed_list[i]
-        for k in range(len(range(src_image_list))):
+        for k in range(len(src_image_list)):
             src_embedding=src_image_dream_embed_list[k]
             dream_similarity_list.append(cos_sim(embedding,src_embedding))
         for j in range(i+1, len(evaluation_image_list)):
