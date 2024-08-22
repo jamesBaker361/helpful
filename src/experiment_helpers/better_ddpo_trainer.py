@@ -99,7 +99,8 @@ class BetterDDPOTrainer(BaseTrainer):
         prompt_function: Callable[[], Tuple[str, Any]],
         sd_pipeline: BetterDefaultDDPOStableDiffusionPipeline,
         image_samples_hook: Optional[Callable[[Any, Any, Any], Any]] = None,
-        subject_key: Optional[str]=""
+        subject_key: Optional[str]="",
+        image_size:Optional[int]=512
     ):
         if image_samples_hook is None:
             warn("No image_samples_hook provided; no images will be logged")
@@ -109,6 +110,7 @@ class BetterDDPOTrainer(BaseTrainer):
         self.config = config
         self.image_samples_callback = image_samples_hook
         self.subject_key=subject_key
+        self.image_size=image_size
 
         accelerator_project_config = ProjectConfiguration(**self.config.project_kwargs)
 
@@ -510,6 +512,8 @@ class BetterDDPOTrainer(BaseTrainer):
                     guidance_scale=self.config.sample_guidance_scale,
                     eta=self.config.sample_eta,
                     output_type="pil",
+                    height=self.image_size,
+                    width=self.image_size
                 )
 
                 images = sd_output.images
