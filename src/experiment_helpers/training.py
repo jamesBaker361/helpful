@@ -82,7 +82,7 @@ def train_unet(pipeline:StableDiffusionPipeline,
     training_image_list=_training_image_list
 
     initial_text_encoder_device=text_encoder.device
-    text_encoder=text_encoder.to(unet.device)
+    #text_encoder=text_encoder.to(unet.device)
     initial_vae_device=vae.device
     vae=vae.to(unet.device)
     pipeline("do this to instantiate things",num_inference_steps=1)
