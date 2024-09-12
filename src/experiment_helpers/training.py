@@ -82,7 +82,7 @@ def train_unet(pipeline:StableDiffusionPipeline,
     training_image_list=_training_image_list
 
     initial_text_encoder_device=text_encoder.device
-    #text_encoder=text_encoder.to(unet.device)
+    text_encoder=text_encoder.to(unet.device)
     initial_vae_device=vae.device
     vae=vae.to(unet.device)
     pipeline("do this to instantiate things",num_inference_steps=1)
@@ -108,7 +108,11 @@ def train_unet(pipeline:StableDiffusionPipeline,
         training_image_list=[
             pil_to_tensor_process(image) for image in training_image_list
         ]
-        training_prompt_list=[encode_prompt(text_encoder,tokenizer,p.format(f"{entity_name}")) for p in training_prompt_list]
+        try:
+            training_prompt_list=[encode_prompt(text_encoder,tokenizer,p.format(f"{entity_name}")) for p in training_prompt_list]
+        except:
+            text_encoder=text_encoder.to(initial_text_encoder_device)
+            training_prompt_list=[encode_prompt(text_encoder,tokenizer,p.format(f"{entity_name}")) for p in training_prompt_list]
         training_image_list_batched=[
             training_image_list[i:i+batch_size] for i in range(0,len(training_image_list),batch_size)
         ]
