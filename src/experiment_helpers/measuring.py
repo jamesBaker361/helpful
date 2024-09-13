@@ -14,10 +14,11 @@ from sentence_transformers import SentenceTransformer
 from sentence_transformers.util import cos_sim as cos_sim_st
 from facenet_pytorch import MTCNN
 from .elastic_face_iresnet import get_face_embedding,get_iresnet_model,face_mask
-from .clothing import clothes_segmentation,BetterUnet
+from .cloth_network import U2NET
+from .cloth_process import load_seg_model,get_palette,generate_mask
 import wandb
 import random, string
-from dreamsim import dreamsim
+from .legacy_dreamsim import dreamsim
 
 
 def randomword(length):
@@ -43,8 +44,9 @@ def get_face_caption(image:Image,blip_processor: Blip2Processor,blip_conditional
     #face_image.save(randomword(3)+"_face.jpg")
     return get_caption(face_image, blip_processor, blip_conditional_gen)
 
-def get_fashion_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen: Blip2ForConditionalGeneration,segmentation_model:BetterUnet,threshold:int)->str:
-    fashion_image=clothes_segmentation(image,segmentation_model,threshold)
+def get_fashion_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen: Blip2ForConditionalGeneration,seg_model:U2NET)->str:
+    #fashion_image=clothes_segmentation(image,segmentation_model,threshold)
+    fashion_image=generate_mask(image,seg_model,blip_conditional_gen.device)
     #fashion_image.save(randomword(3)+"_fashion.jpg")
     return get_caption(fashion_image, blip_processor, blip_conditional_gen)
 
@@ -163,28 +165,28 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
     metric_dict[FASHION_CONSISTENCY]=np.mean(fashion_consistency_list)
     metric_dict[FASHION_SIMILARITY]=np.mean(fashion_similarity_list)
 
-    blip_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
+    '''blip_processor = Blip2Processor.from_pretrained("Salesforce/blip2-opt-2.7b")
     blip_conditional_gen = Blip2ForConditionalGeneration.from_pretrained("Salesforce/blip2-opt-2.7b").eval()
     if accelerator is not None:
         blip_conditional_gen.to(accelerator.device)
-        blip_conditional_gen=accelerator.prepare(blip_conditional_gen)
+        blip_conditional_gen=accelerator.prepare(blip_conditional_gen)'''
     
 
-    src_blip_caption_list=[get_caption(src_image,blip_processor,blip_conditional_gen) for src_image in src_image_list]
-    image_blip_caption_list=[get_caption(image,blip_processor,blip_conditional_gen) for image in evaluation_image_list]
+    '''src_blip_caption_list=[get_caption(src_image,blip_processor,blip_conditional_gen) for src_image in src_image_list]
+    image_blip_caption_list=[get_caption(image,blip_processor,blip_conditional_gen) for image in evaluation_image_list]'''
     embedding_model = SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True).eval()
     if accelerator is not None:
         embedding_model.to(accelerator.device)
         embedding_model=accelerator.prepare(embedding_model)
-    src_blip_embedding_list=embedding_model.encode(src_blip_caption_list)
+    '''src_blip_embedding_list=embedding_model.encode(src_blip_caption_list)
     image_blip_embedding_list=embedding_model.encode(image_blip_caption_list)
-    evaluation_blip_embedding_list=embedding_model.encode(evaluation_prompt_list)
+    evaluation_blip_embedding_list=embedding_model.encode(evaluation_prompt_list)'''
 
 
-    metric_dict[BLIP_TARGET_CAPTION_SIMILARITY]=np.mean(cos_sim_st(src_blip_embedding_list, image_blip_embedding_list).cpu().detach().numpy())
+    '''metric_dict[BLIP_TARGET_CAPTION_SIMILARITY]=np.mean(cos_sim_st(src_blip_embedding_list, image_blip_embedding_list).cpu().detach().numpy())
     metric_dict[BLIP_PROMPT_CAPTION_SIMILARITY]=np.mean(
         [cos_sim_st(evaluation_blip_embedding, image_blip_embedding).cpu().detach().numpy() for evaluation_blip_embedding, image_blip_embedding in zip(evaluation_blip_embedding_list, image_blip_embedding_list)]
-    )
+    )'''
 
     '''blip_model=Blip2Model.from_pretrained("Salesforce/blip2-opt-2.7b")
     blip_inputs=blip_processor(text=evaluation_prompt_list, images=evaluation_image_list+image_list)

@@ -5,7 +5,7 @@ from torchvision import transforms
 import os
 
 
-def dreamsim(pretrained: bool = True, device="cuda", cache_dir="./models", normalize_embeds: bool = True,
+def dreamsim(pretrained: bool = True, device="cuda", cache_dir="/scratch/jlb638/dreamsim", normalize_embeds: bool = True,
              dreamsim_type: str = "ensemble"):
     """ Initializes the DreamSim model. When first called, downloads/caches model weights for future use.
 

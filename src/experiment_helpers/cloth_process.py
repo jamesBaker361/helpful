@@ -101,7 +101,7 @@ def apply_transform(img):
 
 
 
-def generate_mask(input_image, net, palette, device = 'cpu'):
+def generate_mask(input_image, net,device = 'cpu'):
 
     #img = Image.open(input_image).convert('RGB')
     img = input_image
@@ -144,7 +144,7 @@ def generate_mask(input_image, net, palette, device = 'cpu'):
 
     mask=Image.fromarray(np.uint8(mask_array * 255), mode='L')
 
-    return Image.composite(img, Image.new("RGBA", mask.size), mask).convert("RGB")
+    return Image.composite(img, Image.new("RGBA", mask.size), mask).convert("RGB").resize(img_size)
 
     '''masked_image.save(cloth_seg_out_dir+"/masked.png")
 
