@@ -19,6 +19,7 @@ from concurrent import futures
 from typing import Any, Callable, Optional, Tuple
 from warnings import warn
 
+import PIL.Image
 import torch
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -100,7 +101,11 @@ class BetterDDPOTrainer(BaseTrainer):
         sd_pipeline: BetterDefaultDDPOStableDiffusionPipeline,
         image_samples_hook: Optional[Callable[[Any, Any, Any], Any]] = None,
         subject_key: Optional[str]="",
-        image_size:Optional[int]=512
+        image_size:Optional[int]=512,
+        use_ip_adapter:Optional[bool]=False,
+        ip_adapter_scale:Optional[dict]=None,
+        ip_adapter_weight_name:Optional[str]="ip-adapter_sd15.bin",
+        ip_adapter_src_image: Optional[PIL.Image.Image]=None
     ):
         if image_samples_hook is None:
             warn("No image_samples_hook provided; no images will be logged")
@@ -111,6 +116,8 @@ class BetterDDPOTrainer(BaseTrainer):
         self.image_samples_callback = image_samples_hook
         self.subject_key=subject_key
         self.image_size=image_size
+        self.use_ip_adapter=use_ip_adapter
+        self.ip_adapter_src_image=ip_adapter_src_image
 
         accelerator_project_config = ProjectConfiguration(**self.config.project_kwargs)
 
@@ -183,6 +190,12 @@ class BetterDDPOTrainer(BaseTrainer):
             inference_dtype = torch.bfloat16
         else:
             inference_dtype = torch.float32
+
+        if use_ip_adapter:
+            self.sd_pipeline.sd_pipeline.load_ip_adapter("h94/IP-Adapter", subfolder="models", weight_name=ip_adapter_weight_name)
+            if ip_adapter_scale is not None:
+                self.sd_pipeline.sd_pipeline.set_ip_adapter_scale(ip_adapter_scale)
+            #self.sd_pipeline.sd_pipeline.image_encoder
 
         self.sd_pipeline.vae.to(self.accelerator.device, dtype=inference_dtype)
         self.sd_pipeline.text_encoder.to(self.accelerator.device, dtype=inference_dtype)
