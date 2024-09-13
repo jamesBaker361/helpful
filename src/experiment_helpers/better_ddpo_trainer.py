@@ -742,7 +742,7 @@ class BetterDDPOTrainer(BaseTrainer):
 
             with self.autocast():
                 if self.use_ip_adapter:
-                    sd_output=pipeline_step_ip_adapter(self.sd_pipeline,
+                    sd_output=pipeline_step_ip_adapter(self.sd_pipeline.sd_pipeline,
                                                       prompt_embeds=prompt_embeds,
                         negative_prompt_embeds=sample_neg_prompt_embeds,
                         num_inference_steps=self.config.sample_num_steps,
