@@ -629,11 +629,23 @@ class BetterDDPOTrainer(BaseTrainer):
             (all of these are of shape (1,))
         """
         with self.autocast():
+            added_cond_kwargs ={}
+            if self.use_ip_adapter:
+                image_embeds = self.sd_pipeline.sd_pipeline.prepare_ip_adapter_image_embeds(
+                    self.ip_adapter_src_image,
+                    None,
+                    self.sd_pipeline.unet.device,
+                    len(latents),
+                    self.config.train_cfg,
+                )
+                added_cond_kwargs = {"image_embeds": image_embeds}
+
             if self.config.train_cfg:
                 noise_pred = self.sd_pipeline.unet(
                     torch.cat([latents] * 2),
                     torch.cat([timesteps] * 2),
                     embeds,
+                    added_cond_kwargs=added_cond_kwargs
                 ).sample
                 noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
                 noise_pred = noise_pred_uncond + self.config.sample_guidance_scale * (
@@ -644,6 +656,7 @@ class BetterDDPOTrainer(BaseTrainer):
                     latents,
                     timesteps,
                     embeds,
+                    added_cond_kwargs=added_cond_kwargs
                 ).sample
             # compute the log prob of next_latents given latents under the current model
 
