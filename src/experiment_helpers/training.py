@@ -87,6 +87,9 @@ def train_unet(pipeline:StableDiffusionPipeline,
     initial_vae_device=vae.device
     vae=vae.to(unet.device)
     pipeline("do this to instantiate things",num_inference_steps=1,ip_adapter_image=ip_adapter_image)
+    added_cond_kwargs={}
+    if ip_adapter_image is not None:
+        added_cond_kwargs["image_embeds"]=pipeline.prepare_ip_adapter_image_embeds(ip_adapter_image,None,unet.device,1,False)
     width,height=training_image_list[0].size
     if use_prior_preservation:
         #prior_prompt_list=[p.format(prior_class) for p in training_prompt_list]
@@ -170,7 +173,7 @@ def train_unet(pipeline:StableDiffusionPipeline,
                 print('timesteps.device',timesteps.device)
                 print('prompts.device',prompts.device)'''
                 model_pred = unet(
-                    noisy_model_input, timesteps, prompts, return_dict=False
+                    noisy_model_input, timesteps, prompts, return_dict=False,added_cond_kwargs=added_cond_kwargs
                 )[0]
                 if use_prior_preservation:
                     # Chunk the noise and model_pred into two parts and compute the loss on each part separately.
