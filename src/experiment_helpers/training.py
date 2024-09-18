@@ -56,7 +56,8 @@ def train_unet(pipeline:StableDiffusionPipeline,
                    accelerator:Accelerator,
                    num_inference_steps:int,
                    prior_loss_weight:float,
-                   track_loss:bool=False)->StableDiffusionPipeline:
+                   track_loss:bool=False,
+                   ip_adapter_image:Image.Image=None)->StableDiffusionPipeline:
     '''
     prior_class= "cat" or "man" or whatever
     training_prompt_list= ["{} doing a thing"] will be formatted with entity_name or if 
@@ -85,7 +86,7 @@ def train_unet(pipeline:StableDiffusionPipeline,
     text_encoder=text_encoder.to(unet.device)
     initial_vae_device=vae.device
     vae=vae.to(unet.device)
-    pipeline("do this to instantiate things",num_inference_steps=1)
+    pipeline("do this to instantiate things",num_inference_steps=1,ip_adapter_image=ip_adapter_image)
     width,height=training_image_list[0].size
     if use_prior_preservation:
         #prior_prompt_list=[p.format(prior_class) for p in training_prompt_list]

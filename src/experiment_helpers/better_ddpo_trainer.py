@@ -418,6 +418,7 @@ class BetterDDPOTrainer(BaseTrainer):
             self.sd_pipeline.sd_pipeline.load_ip_adapter("h94/IP-Adapter", subfolder="models", weight_name=ip_adapter_weight_name)
             if ip_adapter_scale is not None:
                 self.sd_pipeline.sd_pipeline.set_ip_adapter_scale(ip_adapter_scale)
+            self.sd_pipeline.sd_pipeline.image_encoder.to(self.accelerator.device, dtype=inference_dtype)
             #self.sd_pipeline.sd_pipeline.image_encoder
 
         self.sd_pipeline.vae.to(self.accelerator.device, dtype=inference_dtype)
