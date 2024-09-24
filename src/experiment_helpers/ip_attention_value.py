@@ -360,8 +360,8 @@ class IPAdapterAttnProcessorKey(IPAdapterAttnProcessor2_0): #https://github.com/
             ip_adapter_masks = [None] * len(self.scale)
 
         # for ip-adapter
-        for current_ip_hidden_states, scale,  to_k_ip, mask in zip(
-            ip_hidden_states, self.scale, self.to_k_ip, ip_adapter_masks
+        for current_ip_hidden_states, scale,  to_k_ip, to_v_ip, mask in zip(
+            ip_hidden_states, self.scale, self.to_k_ip, self.to_v_ip, ip_adapter_masks
         ):
             skip = False
             if isinstance(scale, list):
@@ -404,11 +404,16 @@ class IPAdapterAttnProcessorKey(IPAdapterAttnProcessor2_0): #https://github.com/
                         hidden_states = hidden_states + scale[i] * (_current_ip_hidden_states * mask_downsample)
                 else:
                     ip_key = to_k_ip(current_ip_hidden_states)
-                    #ip_value = to_v_ip(current_ip_hidden_states)
+                    
+                    ip_value = to_v_ip(current_ip_hidden_states)
 
                     ip_key = ip_key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-                    #ip_value = ip_value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+                    ip_value = ip_value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
 
+                    print("value size",value.size())
+                    print('key.size()',key.size())
+                    print('ip_value.size()',ip_value.size())
+                    print('ip_key.size()',ip_key.size())
                     # the output of sdp = (batch, num_heads, seq_len, head_dim)
                     # TODO: add support for attn.scale when we move to Torch 2.1
                     current_ip_hidden_states = F.scaled_dot_product_attention(
