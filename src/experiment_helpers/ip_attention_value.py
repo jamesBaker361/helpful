@@ -30,6 +30,8 @@ from diffusers.utils import (
     is_transformers_available,
     logging,
 )
+
+from diffusers.models.modeling_utils import load_model_dict_into_meta, load_state_dict
 from diffusers.loaders.unet_loader_utils import _maybe_expand_lora_scales
 from diffusers.loaders.ip_adapter import IPAdapterMixin
 from diffusers.loaders.unet import UNet2DConditionLoadersMixin
@@ -41,6 +43,8 @@ from diffusers.models.embeddings import (
     IPAdapterPlusImageProjection,
     MultiIPAdapterImageProjection,
 )
+
+from contextlib import nullcontext
 
 
 if is_transformers_available():
@@ -434,11 +438,12 @@ class IPAdapterAttnProcessorKey(IPAdapterAttnProcessor2_0): #https://github.com/
         return hidden_states
     
 
-def load_ip_adapter_value( #https://github.com/huggingface/diffusers/blob/main/src/diffusers/loaders/ip_adapter.py#L55
+def load_ip_adapter_single( #https://github.com/huggingface/diffusers/blob/main/src/diffusers/loaders/ip_adapter.py#L55
         self:IPAdapterMixin,
         pretrained_model_name_or_path_or_dict: Union[str, List[str], Dict[str, torch.Tensor]],
         subfolder: Union[str, List[str]],
         weight_name: Union[str, List[str]],
+        variant: str,
         image_encoder_folder: Optional[str] = "image_encoder",
         **kwargs,):
     """
@@ -458,6 +463,8 @@ def load_ip_adapter_value( #https://github.com/huggingface/diffusers/blob/main/s
         weight_name (`str` or `List[str]`):
             The name of the weight file to load. If a list is passed, it should have the same length as
             `weight_name`.
+        variant (str):
+            one of "key" or "value"
         image_encoder_folder (`str`, *optional*, defaults to `image_encoder`):
             The subfolder location of the image encoder within a larger model repository on the Hub or locally.
             Pass `None` to not load the image encoder. If the image encoder is located in a folder inside
@@ -615,7 +622,8 @@ def load_ip_adapter_value( #https://github.com/huggingface/diffusers/blob/main/s
 
     # load ip-adapter into unet
     unet = getattr(self, self.unet_name) if not hasattr(self, "unet") else self.unet
-    unet._load_ip_adapter_weights(state_dicts, low_cpu_mem_usage=low_cpu_mem_usage) #this we're changing tho
+    #unet._load_ip_adapter_weights(state_dicts, low_cpu_mem_usage=low_cpu_mem_usage) #this we're changing tho
+    _load_ip_adapter_weights_single(unet,state_dicts,variant,low_cpu_mem_usage)
 
     extra_loras = unet._load_ip_adapter_loras(state_dicts)
     if extra_loras != {}:
@@ -631,7 +639,7 @@ def load_ip_adapter_value( #https://github.com/huggingface/diffusers/blob/main/s
 
 
 
-def _load_ip_adapter_weights_value(self:UNet2DConditionLoadersMixin, state_dicts, low_cpu_mem_usage:bool=False): #https://github.com/huggingface/diffusers/blob/main/src/diffusers/loaders/unet.py#L823
+def _load_ip_adapter_weights_single(self:UNet2DConditionLoadersMixin, state_dicts,variant:str, low_cpu_mem_usage:bool=False): #https://github.com/huggingface/diffusers/blob/main/src/diffusers/loaders/unet.py#L823
     if not isinstance(state_dicts, list):
         state_dicts = [state_dicts]
 
@@ -647,7 +655,8 @@ def _load_ip_adapter_weights_value(self:UNet2DConditionLoadersMixin, state_dicts
     # because `IPAdapterPlusImageProjection` also has `attn_processors`.
     self.encoder_hid_proj = None
 
-    attn_procs = self._convert_ip_adapter_attn_to_diffusers(state_dicts, low_cpu_mem_usage=low_cpu_mem_usage)
+    #attn_procs = self._convert_ip_adapter_attn_to_diffusers(state_dicts, low_cpu_mem_usage=low_cpu_mem_usage)
+    attn_procs=_convert_ip_adapter_attn_to_diffusers_single(self,state_dicts,variant,low_cpu_mem_usage)
     self.set_attn_processor(attn_procs)
 
     # convert IP-Adapter Image Projection layers to diffusers
@@ -662,3 +671,88 @@ def _load_ip_adapter_weights_value(self:UNet2DConditionLoadersMixin, state_dicts
     self.config.encoder_hid_dim_type = "ip_image_proj"
 
     self.to(dtype=self.dtype, device=self.device)
+
+
+#https://github.com/huggingface/diffusers/blob/main/src/diffusers/loaders/unet.py#L733
+
+def _convert_ip_adapter_attn_to_diffusers_single(self:UNet2DConditionLoadersMixin, state_dicts, variant:str, low_cpu_mem_usage=False):
+
+    if low_cpu_mem_usage:
+        if is_accelerate_available():
+            from accelerate import init_empty_weights
+
+        else:
+            low_cpu_mem_usage = False
+            logger.warning(
+                "Cannot initialize model with low cpu memory usage because `accelerate` was not found in the"
+                " environment. Defaulting to `low_cpu_mem_usage=False`. It is strongly recommended to install"
+                " `accelerate` for faster and less memory-intense model loading. You can do so with: \n```\npip"
+                " install accelerate\n```\n."
+            )
+
+    if low_cpu_mem_usage is True and not is_torch_version(">=", "1.9.0"):
+        raise NotImplementedError(
+            "Low memory initialization requires torch >= 1.9.0. Please either update your PyTorch version or set"
+            " `low_cpu_mem_usage=False`."
+        )
+
+    # set ip-adapter cross-attention processors & load state_dict
+    attn_procs = {}
+    key_id = 1
+    init_context = init_empty_weights if low_cpu_mem_usage else nullcontext
+    for name in self.attn_processors.keys():
+        cross_attention_dim = None if name.endswith("attn1.processor") else self.config.cross_attention_dim
+        if name.startswith("mid_block"):
+            hidden_size = self.config.block_out_channels[-1]
+        elif name.startswith("up_blocks"):
+            block_id = int(name[len("up_blocks.")])
+            hidden_size = list(reversed(self.config.block_out_channels))[block_id]
+        elif name.startswith("down_blocks"):
+            block_id = int(name[len("down_blocks.")])
+            hidden_size = self.config.block_out_channels[block_id]
+
+        if variant=="key":
+            attn_processor_class=IPAdapterAttnProcessorKey
+        elif variant=="value":
+            attn_processor_class=IPAdapterAttnProcessorValue
+            num_image_text_embeds = []
+            for state_dict in state_dicts:
+                if "proj.weight" in state_dict["image_proj"]:
+                    # IP-Adapter
+                    num_image_text_embeds += [4]
+                elif "proj.3.weight" in state_dict["image_proj"]:
+                    # IP-Adapter Full Face
+                    num_image_text_embeds += [257]  # 256 CLIP tokens + 1 CLS token
+                elif "perceiver_resampler.proj_in.weight" in state_dict["image_proj"]:
+                    # IP-Adapter Face ID Plus
+                    num_image_text_embeds += [4]
+                elif "norm.weight" in state_dict["image_proj"]:
+                    # IP-Adapter Face ID
+                    num_image_text_embeds += [4]
+                else:
+                    # IP-Adapter Plus
+                    num_image_text_embeds += [state_dict["image_proj"]["latents"].shape[1]]
+
+            with init_context():
+                attn_procs[name] = attn_processor_class(
+                    hidden_size=hidden_size,
+                    cross_attention_dim=cross_attention_dim,
+                    scale=1.0,
+                    num_tokens=num_image_text_embeds,
+                )
+
+            value_dict = {}
+            for i, state_dict in enumerate(state_dicts):
+                value_dict.update({f"to_k_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_k_ip.weight"]})
+                value_dict.update({f"to_v_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_v_ip.weight"]})
+
+            if not low_cpu_mem_usage:
+                attn_procs[name].load_state_dict(value_dict)
+            else:
+                device = next(iter(value_dict.values())).device
+                dtype = next(iter(value_dict.values())).dtype
+                load_model_dict_into_meta(attn_procs[name], value_dict, device=device, dtype=dtype)
+
+            key_id += 2
+
+    return attn_procs
