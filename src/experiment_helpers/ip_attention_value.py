@@ -745,18 +745,18 @@ def _convert_ip_adapter_attn_to_diffusers_single(self:UNet2DConditionLoadersMixi
                     num_tokens=num_image_text_embeds,
                 )
 
-        value_dict = {}
-        for i, state_dict in enumerate(state_dicts):
-            value_dict.update({f"to_k_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_k_ip.weight"]})
-            value_dict.update({f"to_v_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_v_ip.weight"]})
+            value_dict = {}
+            for i, state_dict in enumerate(state_dicts):
+                value_dict.update({f"to_k_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_k_ip.weight"]})
+                value_dict.update({f"to_v_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_v_ip.weight"]})
 
-        if not low_cpu_mem_usage:
-            attn_procs[name].load_state_dict(value_dict)
-        else:
-            device = next(iter(value_dict.values())).device
-            dtype = next(iter(value_dict.values())).dtype
-            load_model_dict_into_meta(attn_procs[name], value_dict, device=device, dtype=dtype)
+            if not low_cpu_mem_usage:
+                attn_procs[name].load_state_dict(value_dict)
+            else:
+                device = next(iter(value_dict.values())).device
+                dtype = next(iter(value_dict.values())).dtype
+                load_model_dict_into_meta(attn_procs[name], value_dict, device=device, dtype=dtype)
 
-        key_id += 2
+            key_id += 2
 
     return attn_procs
