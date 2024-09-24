@@ -711,10 +711,14 @@ def _convert_ip_adapter_attn_to_diffusers_single(self:UNet2DConditionLoadersMixi
             block_id = int(name[len("down_blocks.")])
             hidden_size = self.config.block_out_channels[block_id]
 
-        if variant=="key":
-            attn_processor_class=IPAdapterAttnProcessorKey
-        elif variant=="value":
-            attn_processor_class=IPAdapterAttnProcessorValue
+        if cross_attention_dim is None or "motion_modules" in name:
+            attn_processor_class = self.attn_processors[name].__class__
+            attn_procs[name] = attn_processor_class()
+        else:
+            if variant=="key":
+                attn_processor_class=IPAdapterAttnProcessorKey
+            elif variant=="value":
+                attn_processor_class=IPAdapterAttnProcessorValue
         num_image_text_embeds = []
         for state_dict in state_dicts:
             if "proj.weight" in state_dict["image_proj"]:
