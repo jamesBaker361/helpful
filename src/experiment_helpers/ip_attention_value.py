@@ -715,44 +715,44 @@ def _convert_ip_adapter_attn_to_diffusers_single(self:UNet2DConditionLoadersMixi
             attn_processor_class=IPAdapterAttnProcessorKey
         elif variant=="value":
             attn_processor_class=IPAdapterAttnProcessorValue
-            num_image_text_embeds = []
-            for state_dict in state_dicts:
-                if "proj.weight" in state_dict["image_proj"]:
-                    # IP-Adapter
-                    num_image_text_embeds += [4]
-                elif "proj.3.weight" in state_dict["image_proj"]:
-                    # IP-Adapter Full Face
-                    num_image_text_embeds += [257]  # 256 CLIP tokens + 1 CLS token
-                elif "perceiver_resampler.proj_in.weight" in state_dict["image_proj"]:
-                    # IP-Adapter Face ID Plus
-                    num_image_text_embeds += [4]
-                elif "norm.weight" in state_dict["image_proj"]:
-                    # IP-Adapter Face ID
-                    num_image_text_embeds += [4]
-                else:
-                    # IP-Adapter Plus
-                    num_image_text_embeds += [state_dict["image_proj"]["latents"].shape[1]]
-
-            with init_context():
-                attn_procs[name] = attn_processor_class(
-                    hidden_size=hidden_size,
-                    cross_attention_dim=cross_attention_dim,
-                    scale=1.0,
-                    num_tokens=num_image_text_embeds,
-                )
-
-            value_dict = {}
-            for i, state_dict in enumerate(state_dicts):
-                value_dict.update({f"to_k_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_k_ip.weight"]})
-                value_dict.update({f"to_v_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_v_ip.weight"]})
-
-            if not low_cpu_mem_usage:
-                attn_procs[name].load_state_dict(value_dict)
+        num_image_text_embeds = []
+        for state_dict in state_dicts:
+            if "proj.weight" in state_dict["image_proj"]:
+                # IP-Adapter
+                num_image_text_embeds += [4]
+            elif "proj.3.weight" in state_dict["image_proj"]:
+                # IP-Adapter Full Face
+                num_image_text_embeds += [257]  # 256 CLIP tokens + 1 CLS token
+            elif "perceiver_resampler.proj_in.weight" in state_dict["image_proj"]:
+                # IP-Adapter Face ID Plus
+                num_image_text_embeds += [4]
+            elif "norm.weight" in state_dict["image_proj"]:
+                # IP-Adapter Face ID
+                num_image_text_embeds += [4]
             else:
-                device = next(iter(value_dict.values())).device
-                dtype = next(iter(value_dict.values())).dtype
-                load_model_dict_into_meta(attn_procs[name], value_dict, device=device, dtype=dtype)
+                # IP-Adapter Plus
+                num_image_text_embeds += [state_dict["image_proj"]["latents"].shape[1]]
 
-            key_id += 2
+        with init_context():
+            attn_procs[name] = attn_processor_class(
+                hidden_size=hidden_size,
+                cross_attention_dim=cross_attention_dim,
+                scale=1.0,
+                num_tokens=num_image_text_embeds,
+            )
+
+        value_dict = {}
+        for i, state_dict in enumerate(state_dicts):
+            value_dict.update({f"to_k_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_k_ip.weight"]})
+            value_dict.update({f"to_v_ip.{i}.weight": state_dict["ip_adapter"][f"{key_id}.to_v_ip.weight"]})
+
+        if not low_cpu_mem_usage:
+            attn_procs[name].load_state_dict(value_dict)
+        else:
+            device = next(iter(value_dict.values())).device
+            dtype = next(iter(value_dict.values())).dtype
+            load_model_dict_into_meta(attn_procs[name], value_dict, device=device, dtype=dtype)
+
+        key_id += 2
 
     return attn_procs
