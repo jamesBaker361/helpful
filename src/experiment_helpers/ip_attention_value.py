@@ -719,31 +719,31 @@ def _convert_ip_adapter_attn_to_diffusers_single(self:UNet2DConditionLoadersMixi
                 attn_processor_class=IPAdapterAttnProcessorKey
             elif variant=="value":
                 attn_processor_class=IPAdapterAttnProcessorValue
-        num_image_text_embeds = []
-        for state_dict in state_dicts:
-            if "proj.weight" in state_dict["image_proj"]:
-                # IP-Adapter
-                num_image_text_embeds += [4]
-            elif "proj.3.weight" in state_dict["image_proj"]:
-                # IP-Adapter Full Face
-                num_image_text_embeds += [257]  # 256 CLIP tokens + 1 CLS token
-            elif "perceiver_resampler.proj_in.weight" in state_dict["image_proj"]:
-                # IP-Adapter Face ID Plus
-                num_image_text_embeds += [4]
-            elif "norm.weight" in state_dict["image_proj"]:
-                # IP-Adapter Face ID
-                num_image_text_embeds += [4]
-            else:
-                # IP-Adapter Plus
-                num_image_text_embeds += [state_dict["image_proj"]["latents"].shape[1]]
+            num_image_text_embeds = []
+            for state_dict in state_dicts:
+                if "proj.weight" in state_dict["image_proj"]:
+                    # IP-Adapter
+                    num_image_text_embeds += [4]
+                elif "proj.3.weight" in state_dict["image_proj"]:
+                    # IP-Adapter Full Face
+                    num_image_text_embeds += [257]  # 256 CLIP tokens + 1 CLS token
+                elif "perceiver_resampler.proj_in.weight" in state_dict["image_proj"]:
+                    # IP-Adapter Face ID Plus
+                    num_image_text_embeds += [4]
+                elif "norm.weight" in state_dict["image_proj"]:
+                    # IP-Adapter Face ID
+                    num_image_text_embeds += [4]
+                else:
+                    # IP-Adapter Plus
+                    num_image_text_embeds += [state_dict["image_proj"]["latents"].shape[1]]
 
-        with init_context():
-            attn_procs[name] = attn_processor_class(
-                hidden_size=hidden_size,
-                cross_attention_dim=cross_attention_dim,
-                scale=1.0,
-                num_tokens=num_image_text_embeds,
-            )
+            with init_context():
+                attn_procs[name] = attn_processor_class(
+                    hidden_size=hidden_size,
+                    cross_attention_dim=cross_attention_dim,
+                    scale=1.0,
+                    num_tokens=num_image_text_embeds,
+                )
 
         value_dict = {}
         for i, state_dict in enumerate(state_dicts):
