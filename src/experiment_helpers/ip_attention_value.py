@@ -58,48 +58,7 @@ if is_transformers_available():
 
 logger = logging.get_logger(__name__)
 
-class IPAdapterAttnProcessorValue(torch.nn.Module): #https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py
-    r"""
-    Attention processor for IP-Adapter for PyTorch 2.0.
-
-    Args:
-        hidden_size (`int`):
-            The hidden size of the attention layer.
-        cross_attention_dim (`int`):
-            The number of channels in the `encoder_hidden_states`.
-        num_tokens (`int`, `Tuple[int]` or `List[int]`, defaults to `(4,)`):
-            The context length of the image features.
-        scale (`float` or `List[float]`, defaults to 1.0):
-            the weight scale of image prompt.
-    """
-
-    def __init__(self, hidden_size, cross_attention_dim=None, num_tokens=(4,), scale=1.0):
-        super().__init__()
-
-        if not hasattr(F, "scaled_dot_product_attention"):
-            raise ImportError(
-                f"{self.__class__.__name__} requires PyTorch 2.0, to use it, please upgrade PyTorch to 2.0."
-            )
-
-        self.hidden_size = hidden_size
-        self.cross_attention_dim = cross_attention_dim
-
-        if not isinstance(num_tokens, (tuple, list)):
-            num_tokens = [num_tokens]
-        self.num_tokens = num_tokens
-
-        if not isinstance(scale, list):
-            scale = [scale] * len(num_tokens)
-        if len(scale) != len(num_tokens):
-            raise ValueError("`scale` should be a list of integers with the same length as `num_tokens`.")
-        self.scale = scale
-
-        #self.to_k_ip = nn.ModuleList([nn.Linear(cross_attention_dim, hidden_size, bias=False) for _ in range(len(num_tokens))])
-
-        self.to_v_ip = nn.ModuleList(
-            [nn.Linear(cross_attention_dim, hidden_size, bias=False) for _ in range(len(num_tokens))]
-        )
-
+class IPAdapterAttnProcessorValue(IPAdapterAttnProcessor2_0): #https://github.com/huggingface/diffusers/blob/main/src/diffusers/models/attention_processor.py
     def __call__(
         self,
         attn: Attention,
