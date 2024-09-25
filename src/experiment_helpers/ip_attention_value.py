@@ -415,8 +415,8 @@ class IPAdapterAttnProcessorKey(IPAdapterAttnProcessor2_0): #https://github.com/
                     print('ip_value.size()',ip_value.size())
                     print('ip_key.size()',ip_key.size())
                     padding_size=(ip_key.size()[0], ip_key.size()[1],77-ip_key.size()[2],ip_key.size()[3])
-                    padding_tensor=torch.zeros(padding_size)
-                    ip_key=torch.cat(ip_key,padding_tensor,dim=2)
+                    padding_tensor=torch.zeros(padding_size).to(ip_key.device)
+                    ip_key=torch.cat((ip_key,padding_tensor),dim=2)
                     # the output of sdp = (batch, num_heads, seq_len, head_dim)
                     # TODO: add support for attn.scale when we move to Torch 2.1
                     current_ip_hidden_states = F.scaled_dot_product_attention(
