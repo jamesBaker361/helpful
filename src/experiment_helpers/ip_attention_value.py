@@ -223,6 +223,11 @@ class IPAdapterAttnProcessorValue(IPAdapterAttnProcessor2_0): #https://github.co
 
                     # the output of sdp = (batch, num_heads, seq_len, head_dim)
                     # TODO: add support for attn.scale when we move to Torch 2.1
+
+                    padding_size=(ip_value.size()[0], ip_value.size()[1],77-ip_value.size()[2],ip_value.size()[3])
+                    padding_tensor=torch.ones(padding_size).to(ip_value.device)
+                    ip_value=torch.cat((ip_value,padding_tensor),dim=2)
+
                     current_ip_hidden_states = F.scaled_dot_product_attention(
                         query, key, ip_value, attn_mask=None, dropout_p=0.0, is_causal=False
                     )
@@ -405,17 +410,17 @@ class IPAdapterAttnProcessorKey(IPAdapterAttnProcessor2_0): #https://github.com/
                 else:
                     ip_key = to_k_ip(current_ip_hidden_states)
                     
-                    ip_value = to_v_ip(current_ip_hidden_states)
+                    #ip_value = to_v_ip(current_ip_hidden_states)
 
                     ip_key = ip_key.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
-                    ip_value = ip_value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
+                    #ip_value = ip_value.view(batch_size, -1, attn.heads, head_dim).transpose(1, 2)
 
-                    print("value size",value.size())
-                    print('key.size()',key.size())
-                    print('ip_value.size()',ip_value.size())
-                    print('ip_key.size()',ip_key.size())
+                    #print("value size",value.size())
+                    #print('key.size()',key.size())
+                    #print('ip_value.size()',ip_value.size())
+                    #print('ip_key.size()',ip_key.size())
                     padding_size=(ip_key.size()[0], ip_key.size()[1],77-ip_key.size()[2],ip_key.size()[3])
-                    padding_tensor=torch.zeros(padding_size).to(ip_key.device)
+                    padding_tensor=torch.ones(padding_size).to(ip_key.device)
                     ip_key=torch.cat((ip_key,padding_tensor),dim=2)
                     # the output of sdp = (batch, num_heads, seq_len, head_dim)
                     # TODO: add support for attn.scale when we move to Torch 2.1
