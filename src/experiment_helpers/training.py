@@ -9,6 +9,7 @@ from transformers import CLIPImageProcessor, CLIPTextModel, CLIPTokenizer, CLIPV
 import torch.nn.functional as F
 from tqdm.auto import tqdm
 import time
+import wandb
 
 def pil_to_tensor_process(image:Image):
     tensor=PILToTensor()(image)
@@ -223,7 +224,8 @@ def train_unet_single_prompt(pipeline:StableDiffusionPipeline,
                    num_inference_steps:int,
                    prior_loss_weight:float,
                    track_loss:bool=False,
-                   n_prior:int=5)->StableDiffusionPipeline:
+                   n_prior:int=5,
+                   log_images:int=-1)->StableDiffusionPipeline:
     '''
     prior_class= "cat" or "man" or whatever
     training_prompt_list= ["{} doing a thing"] will be formatted with entity_name or if 
@@ -357,6 +359,21 @@ def train_unet_single_prompt(pipeline:StableDiffusionPipeline,
                 optimizer.zero_grad()
         if accelerator.sync_gradients:
             progress_bar.update(1)
+        if log_images!=-1 and e%log_images==0:
+            image=pipeline(entity_name, num_inference_steps=noise_scheduler.config.num_train_timesteps).images[0]
+            try:
+                accelerator.log({
+                    "training_image":wandb.Image(image)
+                })
+            except:
+                path="temp_training.png"
+                image.save(path)
+                try:
+                    accelerator.log({
+                        "training_image":wandb.Image(path)
+                    })
+                except:
+                    pass
     end=time.time()
     print(f"trained unet! time elapsed: {end-start}")
     return pipeline
