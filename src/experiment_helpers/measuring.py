@@ -18,7 +18,6 @@ from .cloth_network import U2NET
 from .cloth_process import load_seg_model,get_palette,generate_mask
 import wandb
 import random, string
-from .legacy_dreamsim import dreamsim
 
 
 def randomword(length):
@@ -249,29 +248,6 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
         accelerator.free_memory()
 
     torch.cuda.empty_cache()
-
-    dream_model, dream_preprocess = dreamsim(pretrained=True,cache_dir="/scratch/jlb638/dreamsim",device=device)
-    evaluation_image_dream_embed_list=[]
-    src_image_dream_embed_list=[]
-    for images,image_embed_list in zip([evaluation_image_list, src_image_list], [evaluation_image_dream_embed_list, src_image_dream_embed_list]):
-        for image in images:
-            preprocessed=dream_preprocess(image)
-            embedding=dream_model.embed(preprocessed)[0]
-            image_embed_list.append(embedding)
-
-    dream_consistency_list=[]
-    dream_similarity_list=[]
-
-    for i in range(len(evaluation_image_list)):
-        embedding=evaluation_image_dream_embed_list[i]
-        for k in range(len(src_image_list)):
-            src_embedding=src_image_dream_embed_list[k]
-            dream_similarity_list.append(cos_sim(embedding,src_embedding))
-        for j in range(i+1, len(evaluation_image_list)):
-            dream_consistency_list.append(cos_sim(embedding, evaluation_image_dream_embed_list[j]))
-    
-    metric_dict[DREAM_CONSISTENCY]=np.mean(dream_consistency_list)
-    metric_dict[DREAM_SIMILARITY]=np.mean(dream_similarity_list)
 
 
 
