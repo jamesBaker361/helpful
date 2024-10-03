@@ -262,15 +262,10 @@ def pipeline_step_ip_adapter(    self:StableDiffusionPipeline,
 
         if not output_type == "latent":
             image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False)[0]
-            image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
         else:
             image = latents
-            has_nsfw_concept = None
 
-        if has_nsfw_concept is None:
-            do_denormalize = [True] * image.shape[0]
-        else:
-            do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
+        do_denormalize = [True] * image.shape[0]
 
         image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
 
@@ -290,13 +285,16 @@ def get_image_sample_hook(image_dir):
                 pmpt=pmpt.replace(" ", "_")
                 pmpt=re.sub(r'\W+', '', pmpt)
                 pmpt=pmpt[:45]
-                path=image_dir+"/"+pmpt+".png"
-                print("saving at ",path)
-                img.save(path)
                 try:
-                    tracker.log({f"{pmpt}":wandb.Image(path)},tracker.tracker.step)
-                except PIL.UnidentifiedImageError:
-                    pass
+                    tracker.log({f"{pmpt}":wandb.Image(img)},tracker.tracker.step)
+                except:
+                    path=image_dir+"/"+pmpt+".png"
+                    print("saving at ",path)
+                    img.save(path)
+                    try:
+                        tracker.log({f"{pmpt}":wandb.Image(path)},tracker.tracker.step)
+                    except:
+                        pass
     return _fn
 
 class BetterDDPOTrainer(BaseTrainer):
