@@ -360,7 +360,7 @@ def train_unet_single_prompt(pipeline:StableDiffusionPipeline,
         if accelerator.sync_gradients:
             progress_bar.update(1)
         if log_images!=-1 and e%log_images==0:
-            image=pipeline(entity_name, num_inference_steps=noise_scheduler.config.num_train_timesteps).images[0]
+            image=pipeline(entity_name, num_inference_steps=num_inference_steps).images[0]
             try:
                 accelerator.log({
                     "training_image":wandb.Image(image)
