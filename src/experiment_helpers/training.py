@@ -11,7 +11,7 @@ from tqdm.auto import tqdm
 import time
 import wandb
 
-def pil_to_tensor_process(image:Image):
+def pil_to_tensor_process(image:Image.Image):
     tensor=PILToTensor()(image)
     if torch.max(tensor)>1.0 and torch.min(tensor)>=0:
         tensor=tensor/128.0 -1.0
