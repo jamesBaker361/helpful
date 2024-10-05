@@ -72,6 +72,10 @@ def train_unet(pipeline:StableDiffusionPipeline,
     tokenizer=pipeline.tokenizer
     noise_scheduler=pipeline.scheduler
 
+    for p in unet.parameters():
+        dtype=p.dtype
+        break
+
     _training_image_list=[i for i in training_image_list]
     _training_prompt_list=[p for p in training_prompt_list]
     index=0
@@ -151,17 +155,17 @@ def train_unet(pipeline:StableDiffusionPipeline,
                 '''if use_prior_preservation:
                     images,prior_images=images.chunk(2)
                     prompts,prior_prompts=images.chunk(2)'''
-                images=images.to(vae.device)
+                images=images.to(device=vae.device,dtype=dtype)
                 model_input = vae.encode(images).latent_dist.sample()
                 model_input = model_input * vae.config.scaling_factor
                 model_input=model_input.to(unet.device)
-                prompts=prompts.to(unet.device)
+                prompts=prompts.to(unet.device,dtype=dtype)
 
                 noise = torch.randn_like(model_input)
                 bsz, channels, height, width = model_input.shape
                 # Sample a random timestep for each image
                 timesteps = torch.randint(
-                    0, noise_scheduler.config.num_train_timesteps, (bsz,), device=unet.device
+                    0, noise_scheduler.config.num_train_timesteps, (bsz,), device=unet.device,dtype=dtype
                 )
                 timesteps = timesteps.long()
 
@@ -239,6 +243,10 @@ def train_unet_single_prompt(pipeline:StableDiffusionPipeline,
     tokenizer=pipeline.tokenizer
     noise_scheduler=pipeline.scheduler
 
+    for p in unet.parameters():
+        dtype=p.dtype
+        break
+
     _training_image_list=[i for i in training_image_list]
     index=0
     while len(_training_image_list)%batch_size!=0:
@@ -303,19 +311,19 @@ def train_unet_single_prompt(pipeline:StableDiffusionPipeline,
                 '''if use_prior_preservation:
                     images,prior_images=images.chunk(2)
                     prompts,prior_prompts=images.chunk(2)'''
-                images=images.to(vae.device)
+                images=images.to(vae.device,dtype=dtype)
                 model_input = vae.encode(images).latent_dist.sample()
                 model_input = model_input * vae.config.scaling_factor
                 model_input=model_input.to(unet.device)
                 prompts=[encode_prompt(text_encoder,tokenizer,training_prompt.format(f"{entity_name}")) for _ in range(batch_size)]
                 prompts=torch.cat(prompts)
-                prompts=prompts.to(unet.device)
+                prompts=prompts.to(unet.device,dtype=dtype)
 
                 noise = torch.randn_like(model_input,device=unet.device)
                 bsz, channels, height, width = model_input.shape
                 # Sample a random timestep for each image
                 timesteps = torch.randint(
-                    0, noise_scheduler.config.num_train_timesteps, (bsz,), device=unet.device
+                    0, noise_scheduler.config.num_train_timesteps, (bsz,), device=unet.device,dtype=dtype
                 )
                 timesteps = timesteps.long()
 
