@@ -117,8 +117,7 @@ def retrieve_timesteps(
     if timesteps is not None and sigmas is not None:
         raise ValueError("Only one of `timesteps` or `sigmas` can be passed. Please choose one to set custom values")
     if timesteps is not None:
-        scheduler.set_timesteps(timesteps=timesteps, device=device, **kwargs)
-        timesteps = scheduler.timesteps
+        scheduler.timesteps=timesteps
         num_inference_steps = len(timesteps)
     elif sigmas is not None:
         scheduler.set_timesteps(sigmas=sigmas, device=device, **kwargs)
