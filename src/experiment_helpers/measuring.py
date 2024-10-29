@@ -50,6 +50,9 @@ def get_fashion_caption(image:Image,blip_processor: Blip2Processor,blip_conditio
     return get_caption(fashion_image, blip_processor, blip_conditional_gen)
 
 def get_vit_embeddings(vit_processor: ViTImageProcessor, vit_model: BetterViTModel, image_list:list,return_numpy:bool=True):
+    '''
+    returns (vit_embedding_list,vit_style_embedding_list, vit_content_embedding_list)
+    '''
     vit_embedding_list=[]
     vit_content_embedding_list=[]
     vit_style_embedding_list=[]
