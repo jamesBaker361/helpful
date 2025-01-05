@@ -51,6 +51,10 @@ from diffusers.utils.torch_utils import is_compiled_module, is_torch_version, ra
 from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel,UNet2DConditionOutput
 from diffusers.pipelines.stable_diffusion.pipeline_stable_diffusion import retrieve_timesteps
 from .metadata_unet import MetaDataUnet
+from diffusers.utils.outputs import BaseOutput
+
+class HydraMetaDataUnetOutput(BaseOutput):
+    sample_list:List[torch.Tensor]=[]
 
 class HydraMetaDataUnet(MetaDataUnet):
     _supports_gradient_checkpointing = True
@@ -190,6 +194,7 @@ class HydraMetaDataUnet(MetaDataUnet):
             else:
                 self.mid_block_list=None
             self.up_block_list=[deepcopy(self.up_blocks) for __ in range(n_heads)]
+            self.conv_out_list=[deepcopy(self.conv_out) for _ in range(n_heads)]
     
     @classmethod
     def from_unet(cls,old_unet:UNet2DConditionModel,
@@ -354,7 +359,8 @@ class HydraMetaDataUnet(MetaDataUnet):
                 new_unet.mid_block_list=[deepcopy(old_unet.mid_block) for _ in range(n_heads)]
             else:
                 new_unet.mid_block_list=None
-            new_unet.up_block_list=[deepcopy(old_unet.up_blocks) for __ in range(n_heads)]
+            new_unet.up_block_list=[deepcopy(old_unet.up_blocks) for _ in range(n_heads)]
+            new_unet.conv_out_list=[deepcopy(old_unet.conv_out) for _ in range(n_heads)]
         return new_unet
 
     def forward(self,
@@ -635,6 +641,11 @@ class HydraMetaDataUnet(MetaDataUnet):
                             res_hidden_states_tuple=res_samples,
                             upsample_size=upsample_size,
                         )
+            if self.conv_norm_out:
+                new_sample=self.conv_norm_out(new_sample)
+                new_sample=self.conv_act(new_sample)
+            new_sample=self.conv_out_list[index](new_sample)
+            final_sample_list.append(new_sample)
         else:
             for i, upsample_block in enumerate(self.up_blocks):
                 is_final_block = i == len(self.up_blocks) - 1
@@ -666,17 +677,19 @@ class HydraMetaDataUnet(MetaDataUnet):
                         upsample_size=upsample_size,
                     )
 
-        # 6. post-process
-        if self.conv_norm_out:
-            sample = self.conv_norm_out(sample)
-            sample = self.conv_act(sample)
-        sample = self.conv_out(sample)
+            # 6. post-process
+            if self.conv_norm_out:
+                sample = self.conv_norm_out(sample)
+                sample = self.conv_act(sample)
+            sample = self.conv_out(sample)
+            final_sample_list=[sample]
+
 
         if USE_PEFT_BACKEND:
             # remove `lora_scale` from each PEFT layer
             unscale_lora_layers(self, lora_scale)
 
         if not return_dict:
-            return (sample,)
+            return (final_sample_list,)
 
-        return UNet2DConditionOutput(sample=sample)
+        return HydraMetaDataUnetOutput(sample_list=final_sample_list)
