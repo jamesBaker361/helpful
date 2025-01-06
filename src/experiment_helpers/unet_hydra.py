@@ -192,6 +192,7 @@ class HydraMetaDataUnet(MetaDataUnet):
         self.n_heads=n_heads
         self.hydra_junction=hydra_junction
         self.use_hydra_down=use_hydra_down
+        #TODO: get rid of possibility for unshared mid
         if n_heads>1:
             if use_hydra_down:
                 self.down_block_list=[deepcopy(self.down_blocks) for _ in range(n_heads)]
@@ -524,7 +525,6 @@ class HydraMetaDataUnet(MetaDataUnet):
             is_adapter = True
 
         if self.use_hydra_down:
-            #so much
             down_block_res_samples_list=[]
             for index,down_blocks in self.down_block_list:
                 down_block_res_samples = (sample,)
@@ -551,6 +551,19 @@ class HydraMetaDataUnet(MetaDataUnet):
                             sample += down_intrablock_additional_residuals.pop(0)
 
                     down_block_res_samples += res_samples
+
+                    if is_controlnet:
+                        new_down_block_res_samples = ()
+
+                        for down_block_res_sample, down_block_additional_residual in zip(
+                            down_block_res_samples, down_block_additional_residuals
+                        ):
+                            down_block_res_sample = down_block_res_sample + down_block_additional_residual
+                            new_down_block_res_samples = new_down_block_res_samples + (down_block_res_sample,)
+
+                        down_block_res_samples = new_down_block_res_samples
+                down_block_res_samples_list.append(down_block_res_samples)
+                    
         else:
             down_block_res_samples = (sample,)
             for downsample_block in self.down_blocks:
@@ -588,6 +601,8 @@ class HydraMetaDataUnet(MetaDataUnet):
                 down_block_res_samples = new_down_block_res_samples
 
         #hydra stuff
+        #needs to account for when there are multiple samples
+        #get rid of mid being unshared
         # 4. mid
         sample_list=[]
         if self.n_heads>1 and self.hydra_junction=="mid":
