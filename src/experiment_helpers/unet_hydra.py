@@ -190,16 +190,14 @@ class HydraMetaDataUnet(MetaDataUnet):
             metadata_3d_dim
         )
         self.n_heads=n_heads
-        self.hydra_junction=hydra_junction
+        #self.hydra_junction=hydra_junction
         self.use_hydra_down=use_hydra_down
         #TODO: get rid of possibility for unshared mid
         if n_heads>1:
             if use_hydra_down:
+                self.conv_in_list=[deepcopy(self.conv_in) for _ in range(n_heads)]
                 self.down_block_list=[deepcopy(self.down_blocks) for _ in range(n_heads)]
-            if hydra_junction=="mid" and self.mid_block is not None:
-                self.mid_block_list=[deepcopy(self.mid_block) for _ in range(n_heads)]
-            else:
-                self.mid_block_list=None
+            
             self.up_block_list=[deepcopy(self.up_blocks) for __ in range(n_heads)]
             self.conv_out_list=[deepcopy(self.conv_out) for _ in range(n_heads)]
     
@@ -362,20 +360,16 @@ class HydraMetaDataUnet(MetaDataUnet):
             new_unet.config=old_unet.config
         except AttributeError:
             pass
-
         if n_heads>1:
             if use_hydra_down:
+                new_unet.conv_in_list=[deepcopy(old_unet.conv_in) for _ in range(n_heads)]
                 new_unet.down_block_list=[deepcopy(old_unet.down_blocks) for _ in range(n_heads)]
-            if hydra_junction=="mid" and old_unet.mid_block is not None:
-                new_unet.mid_block_list=[deepcopy(old_unet.mid_block) for _ in range(n_heads)]
-            else:
-                new_unet.mid_block_list=None
             new_unet.up_block_list=[deepcopy(old_unet.up_blocks) for _ in range(n_heads)]
             new_unet.conv_out_list=[deepcopy(old_unet.conv_out) for _ in range(n_heads)]
         return new_unet
 
     def forward(self,
-        sample: torch.Tensor,
+        sample: Union[torch.Tensor, List[torch.Tensor]],
         timestep: Union[torch.Tensor, float, int],
         encoder_hidden_states: torch.Tensor,
         class_labels: Optional[torch.Tensor] = None,
@@ -484,8 +478,7 @@ class HydraMetaDataUnet(MetaDataUnet):
                 md_emb_3d=md_embed_3d(metadata_3d[:,i,:,:,:,:])
                 emb=emb+md_emb_3d
 
-        # 2. pre-process
-        sample = self.conv_in(sample)
+        
 
         # 2.5 GLIGEN position net
         if cross_attention_kwargs is not None and cross_attention_kwargs.get("gligen", None) is not None:
@@ -527,7 +520,8 @@ class HydraMetaDataUnet(MetaDataUnet):
         if self.use_hydra_down:
             down_block_res_samples_list=[]
             for index,down_blocks in self.down_block_list:
-                down_block_res_samples = (sample,)
+                new_sample=self.conv_in_list[index](sample[index]) #assume sample=list of tensors
+                down_block_res_samples = (new_sample,)
                 new_sample=sample
                 for downsample_block in down_blocks:
                     if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
@@ -601,40 +595,37 @@ class HydraMetaDataUnet(MetaDataUnet):
                 down_block_res_samples = new_down_block_res_samples
 
         #hydra stuff
-        #needs to account for when there are multiple samples
-        #get rid of mid being unshared
         # 4. mid
         sample_list=[]
-        if self.n_heads>1 and self.hydra_junction=="mid":
-            
-            for mid_block in self.mid_block_list:
-                if hasattr(mid_block, "has_cross_attention") and mid_block.has_cross_attention:
-                    new_sample = mid_block(
-                        sample,
-                        emb,
-                        encoder_hidden_states=encoder_hidden_states,
-                        attention_mask=attention_mask,
-                        cross_attention_kwargs=cross_attention_kwargs,
-                        encoder_attention_mask=encoder_attention_mask,
-                    )
-                else:
-                    new_sample = self.mid_block(sample, emb)
+        if self.mid_block is not None:
+            if self.n_heads>1 and self.use_hydra_down:
+                for index,down_block_res_samples in enumerate(down_block_res_samples_list):
+                    new_sample=down_block_res_samples[-1]
+                    if hasattr(self.mid_block, "has_cross_attention") and self.mid_block.has_cross_attention:
+                        new_sample = self.mid_block(
+                            new_sample,
+                            emb,
+                            encoder_hidden_states=encoder_hidden_states,
+                            attention_mask=attention_mask,
+                            cross_attention_kwargs=cross_attention_kwargs,
+                            encoder_attention_mask=encoder_attention_mask,
+                        )
+                    else:
+                        new_sample = self.mid_block(new_sample, emb)
 
-                # To support T2I-Adapter-XL
-                if (
-                    is_adapter
-                    and len(down_intrablock_additional_residuals) > 0
-                    and new_sample.shape == down_intrablock_additional_residuals[0].shape
-                ):
-                    new_sample += down_intrablock_additional_residuals.pop(0)
+                    # To support T2I-Adapter-XL
+                    if (
+                        is_adapter
+                        and len(down_intrablock_additional_residuals) > 0
+                        and new_sample.shape == down_intrablock_additional_residuals[0].shape
+                    ):
+                        new_sample += down_intrablock_additional_residuals.pop(0)
 
-            if is_controlnet:
-                new_sample = new_sample + mid_block_additional_residual
-            sample_list.append(new_sample)
+                    if is_controlnet:
+                        new_sample = new_sample + mid_block_additional_residual
 
-
-        else:
-            if self.mid_block is not None:
+                    sample_list.append(new_sample)
+            else:
                 if hasattr(self.mid_block, "has_cross_attention") and self.mid_block.has_cross_attention:
                     sample = self.mid_block(
                         sample,
@@ -655,8 +646,8 @@ class HydraMetaDataUnet(MetaDataUnet):
                 ):
                     sample += down_intrablock_additional_residuals.pop(0)
 
-            if is_controlnet:
-                sample = sample + mid_block_additional_residual
+                if is_controlnet:
+                    sample = sample + mid_block_additional_residual
 
         # 5. up
         final_sample_list=[]
