@@ -517,47 +517,51 @@ class HydraMetaDataUnet(MetaDataUnet):
             down_intrablock_additional_residuals = down_block_additional_residuals
             is_adapter = True
 
-        if self.use_hydra_down:
-            down_block_res_samples_list=[]
-            for index,down_blocks in self.down_block_list:
-                new_sample=self.conv_in_list[index](sample[index]) #assume sample=list of tensors
-                down_block_res_samples = (new_sample,)
-                new_sample=sample
-                for downsample_block in down_blocks:
-                    if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
-                        # For t2i-adapter CrossAttnDownBlock2D
-                        additional_residuals = {}
-                        if is_adapter and len(down_intrablock_additional_residuals) > 0:
-                            additional_residuals["additional_residuals"] = down_intrablock_additional_residuals.pop(0)
+        
+        
+        if self.n_heads>1:
+            assert isinstance(sample,list)
+            if self.use_hydra_down:
+                down_block_res_samples_list=[]
+                for index,down_blocks in self.down_block_list:
+                    new_sample=self.conv_in_list[index](sample[index]) #assume sample=list of tensors
+                    down_block_res_samples = (new_sample,)
+                    new_sample=sample
+                    for downsample_block in down_blocks:
+                        if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
+                            # For t2i-adapter CrossAttnDownBlock2D
+                            additional_residuals = {}
+                            if is_adapter and len(down_intrablock_additional_residuals) > 0:
+                                additional_residuals["additional_residuals"] = down_intrablock_additional_residuals.pop(0)
 
-                        new_sample, res_samples = downsample_block(
-                            hidden_states=new_sample,
-                            temb=emb,
-                            encoder_hidden_states=encoder_hidden_states,
-                            attention_mask=attention_mask,
-                            cross_attention_kwargs=cross_attention_kwargs,
-                            encoder_attention_mask=encoder_attention_mask,
-                            **additional_residuals,
-                        )
-                    else:
-                        new_sample, res_samples = downsample_block(hidden_states=new_sample, temb=emb)
-                        if is_adapter and len(down_intrablock_additional_residuals) > 0:
-                            sample += down_intrablock_additional_residuals.pop(0)
+                            new_sample, res_samples = downsample_block(
+                                hidden_states=new_sample,
+                                temb=emb,
+                                encoder_hidden_states=encoder_hidden_states,
+                                attention_mask=attention_mask,
+                                cross_attention_kwargs=cross_attention_kwargs,
+                                encoder_attention_mask=encoder_attention_mask,
+                                **additional_residuals,
+                            )
+                        else:
+                            new_sample, res_samples = downsample_block(hidden_states=new_sample, temb=emb)
+                            if is_adapter and len(down_intrablock_additional_residuals) > 0:
+                                sample += down_intrablock_additional_residuals.pop(0)
 
-                    down_block_res_samples += res_samples
+                        down_block_res_samples += res_samples
 
-                    if is_controlnet:
-                        new_down_block_res_samples = ()
+                        if is_controlnet:
+                            new_down_block_res_samples = ()
 
-                        for down_block_res_sample, down_block_additional_residual in zip(
-                            down_block_res_samples, down_block_additional_residuals
-                        ):
-                            down_block_res_sample = down_block_res_sample + down_block_additional_residual
-                            new_down_block_res_samples = new_down_block_res_samples + (down_block_res_sample,)
+                            for down_block_res_sample, down_block_additional_residual in zip(
+                                down_block_res_samples, down_block_additional_residuals
+                            ):
+                                down_block_res_sample = down_block_res_sample + down_block_additional_residual
+                                new_down_block_res_samples = new_down_block_res_samples + (down_block_res_sample,)
 
-                        down_block_res_samples = new_down_block_res_samples
-                down_block_res_samples_list.append(down_block_res_samples)
-                    
+                            down_block_res_samples = new_down_block_res_samples
+                    down_block_res_samples_list.append(down_block_res_samples)
+            else:      
         else:
             down_block_res_samples = (sample,)
             for downsample_block in self.down_blocks:
