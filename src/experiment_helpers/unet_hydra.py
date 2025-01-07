@@ -521,6 +521,7 @@ class HydraMetaDataUnet(MetaDataUnet):
         
         if self.n_heads>1:
             assert isinstance(sample,list)
+            assert isinstance(down_block_additional_residuals,list)
             down_block_res_samples_list=[]
             if self.use_hydra_down:
                 
@@ -555,7 +556,7 @@ class HydraMetaDataUnet(MetaDataUnet):
                             new_down_block_res_samples = ()
 
                             for down_block_res_sample, down_block_additional_residual in zip(
-                                down_block_res_samples, down_block_additional_residuals
+                                down_block_res_samples, down_block_additional_residuals[index]
                             ):
                                 down_block_res_sample = down_block_res_sample + down_block_additional_residual
                                 new_down_block_res_samples = new_down_block_res_samples + (down_block_res_sample,)
@@ -593,7 +594,7 @@ class HydraMetaDataUnet(MetaDataUnet):
                         new_down_block_res_samples = ()
 
                         for down_block_res_sample, down_block_additional_residual in zip(
-                            down_block_res_samples, down_block_additional_residuals
+                            down_block_res_samples, down_block_additional_residuals[index]
                         ):
                             down_block_res_sample = down_block_res_sample + down_block_additional_residual
                             new_down_block_res_samples = new_down_block_res_samples + (down_block_res_sample,)
@@ -641,6 +642,7 @@ class HydraMetaDataUnet(MetaDataUnet):
         sample_list=[]
         if self.mid_block is not None:
             if self.n_heads>1:
+                assert isinstance(mid_block_additional_residual,list)
                 for index,down_block_res_samples in enumerate(down_block_res_samples_list):
                     new_sample=down_block_res_samples[-1]
                     if hasattr(self.mid_block, "has_cross_attention") and self.mid_block.has_cross_attention:
@@ -664,7 +666,7 @@ class HydraMetaDataUnet(MetaDataUnet):
                         new_sample += down_intrablock_additional_residuals.pop(0)
 
                     if is_controlnet:
-                        new_sample = new_sample + mid_block_additional_residual
+                        new_sample = new_sample + mid_block_additional_residual[index]
 
                     sample_list.append(new_sample)
             else:
@@ -1145,6 +1147,75 @@ def forward_hydra(self:StableDiffusionControlNetPipeline,
                 ]
                 controlnet_keep.append(keeps[0] if isinstance(controlnet, ControlNetModel) else keeps)
 
+
+        def controlnet_inference(latents,latent_model_input):
+            if available_controlnet:
+                # controlnet(s) inference
+                if guess_mode and self.do_classifier_free_guidance:
+                    # Infer ControlNet only for the conditional batch.
+                    control_model_input = latents
+                    control_model_input = self.scheduler.scale_model_input(control_model_input, t)
+                    controlnet_prompt_embeds = prompt_embeds.chunk(2)[1]
+                else:
+                    control_model_input = latent_model_input
+                    controlnet_prompt_embeds = prompt_embeds
+
+                if isinstance(controlnet_keep[i], list):
+                    cond_scale = [c * s for c, s in zip(controlnet_conditioning_scale, controlnet_keep[i])]
+                else:
+                    controlnet_cond_scale = controlnet_conditioning_scale
+                    if isinstance(controlnet_cond_scale, list):
+                        controlnet_cond_scale = controlnet_cond_scale[0]
+                    cond_scale = controlnet_cond_scale * controlnet_keep[i]
+
+                down_block_res_samples, mid_block_res_sample = self.controlnet(
+                    control_model_input,
+                    t,
+                    encoder_hidden_states=controlnet_prompt_embeds,
+                    controlnet_cond=image,
+                    conditioning_scale=cond_scale,
+                    guess_mode=guess_mode,
+                    return_dict=False,
+                )
+
+                if guess_mode and self.do_classifier_free_guidance:
+                    # Inferred ControlNet only for the conditional batch.
+                    # To apply the output of ControlNet to both the unconditional and conditional batches,
+                    # add 0 to the unconditional batch to keep it unchanged.
+                    down_block_res_samples = [torch.cat([torch.zeros_like(d), d]) for d in down_block_res_samples]
+                    mid_block_res_sample = torch.cat([torch.zeros_like(mid_block_res_sample), mid_block_res_sample])
+            else:
+                down_block_res_samples=None
+                mid_block_res_sample=None
+            return down_block_res_samples,mid_block_res_sample
+
+        def guidance_and_step(noise_pred,t,latents):
+            # perform guidance
+            if self.do_classifier_free_guidance:
+                noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
+                noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
+
+            # compute the previous noisy sample x_t -> x_t-1
+            latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+
+            return latents
+        
+        def process_image(latents):
+            if not output_type == "latent":
+                image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False, generator=generator)[
+                    0
+                ]
+                #image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
+            else:
+                image = latents
+                #has_nsfw_concept = None
+
+            do_denormalize = [True] * image.shape[0]
+
+            image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
+
+            return image
+
         # 8. Denoising loop
         num_warmup_steps = len(timesteps) - num_inference_steps * self.scheduler.order
         is_unet_compiled = is_compiled_module(self.unet)
@@ -1153,6 +1224,8 @@ def forward_hydra(self:StableDiffusionControlNetPipeline,
         else:
             is_controlnet_compiled =True
         is_torch_higher_equal_2_1 = is_torch_version(">=", "2.1")
+        if hasattr(self.unet,"n_heads") and self.unet.n_heads>1:
+            latent_list=[latents for _ in range(self.unet.n_heads)]
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
                 if self.interrupt:
@@ -1163,51 +1236,36 @@ def forward_hydra(self:StableDiffusionControlNetPipeline,
                 if (is_unet_compiled and is_controlnet_compiled) and is_torch_higher_equal_2_1:
                     torch._inductor.cudagraph_mark_step_begin()
                 # expand the latents if we are doing classifier free guidance
-                latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
-                latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
-
-                if available_controlnet:
-                    # controlnet(s) inference
-                    if guess_mode and self.do_classifier_free_guidance:
-                        # Infer ControlNet only for the conditional batch.
-                        control_model_input = latents
-                        control_model_input = self.scheduler.scale_model_input(control_model_input, t)
-                        controlnet_prompt_embeds = prompt_embeds.chunk(2)[1]
-                    else:
-                        control_model_input = latent_model_input
-                        controlnet_prompt_embeds = prompt_embeds
-
-                    if isinstance(controlnet_keep[i], list):
-                        cond_scale = [c * s for c, s in zip(controlnet_conditioning_scale, controlnet_keep[i])]
-                    else:
-                        controlnet_cond_scale = controlnet_conditioning_scale
-                        if isinstance(controlnet_cond_scale, list):
-                            controlnet_cond_scale = controlnet_cond_scale[0]
-                        cond_scale = controlnet_cond_scale * controlnet_keep[i]
-
-                    down_block_res_samples, mid_block_res_sample = self.controlnet(
-                        control_model_input,
-                        t,
-                        encoder_hidden_states=controlnet_prompt_embeds,
-                        controlnet_cond=image,
-                        conditioning_scale=cond_scale,
-                        guess_mode=guess_mode,
-                        return_dict=False,
-                    )
-
-                    if guess_mode and self.do_classifier_free_guidance:
-                        # Inferred ControlNet only for the conditional batch.
-                        # To apply the output of ControlNet to both the unconditional and conditional batches,
-                        # add 0 to the unconditional batch to keep it unchanged.
-                        down_block_res_samples = [torch.cat([torch.zeros_like(d), d]) for d in down_block_res_samples]
-                        mid_block_res_sample = torch.cat([torch.zeros_like(mid_block_res_sample), mid_block_res_sample])
+                if hasattr(self.unet,"n_heads") and self.unet.n_heads>1:
+                    latent_model_input_list=[]
+                    for latents in latent_list:
+                        latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
+                        latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                        latent_model_input_list.append(latent_model_input)
                 else:
-                    down_block_res_samples=None
-                    mid_block_res_sample=None
-
+                    latent_model_input = torch.cat([latents] * 2) if self.do_classifier_free_guidance else latents
+                    latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
+                    
+                if hasattr(self.unet,"n_heads") and self.unet.n_heads>1:
+                    down_block_res_samples_list=[]
+                    mid_block_res_sample_list=[]
+                    for index,latents in enumerate(latent_list):
+                        latent_model_input=latent_model_input_list[index]
+                        down_block_res_samples,mid_block_res_sample=controlnet_inference(latents,latent_model_input)
+                    
+                        down_block_res_samples_list.append(down_block_res_samples)
+                        mid_block_res_sample_list.append(mid_block_res_sample)
+                else:
+                    down_block_res_samples,mid_block_res_sample=controlnet_inference(latents,latent_model_input)
                 
+                
+                
+                if hasattr(self.unet,"n_heads") and self.unet.n_heads>1:
+                    latent_model_input=latent_model_input_list
+                    down_block_res_samples=down_block_res_samples_list
+                    mid_block_res_sample=mid_block_res_sample_list
                 # predict the noise residual
-                noise_pred = self.unet(
+                noise_pred_output = self.unet(
                     latent_model_input,
                     t,
                     encoder_hidden_states=prompt_embeds,
@@ -1219,15 +1277,15 @@ def forward_hydra(self:StableDiffusionControlNetPipeline,
                     return_dict=False,
                     metadata=metadata,
                     metadata_3d=metadata_3d
-                )[0]
-
-                # perform guidance
-                if self.do_classifier_free_guidance:
-                    noise_pred_uncond, noise_pred_text = noise_pred.chunk(2)
-                    noise_pred = noise_pred_uncond + self.guidance_scale * (noise_pred_text - noise_pred_uncond)
-
-                # compute the previous noisy sample x_t -> x_t-1
-                latents = self.scheduler.step(noise_pred, t, latents, **extra_step_kwargs, return_dict=False)[0]
+                )
+                if  hasattr(self.unet,"n_heads") is False or self.unet.n_heads<=1:
+                    noise_pred=noise_pred_output[0]
+                    latents=guidance_and_step(noise_pred,t,latents)
+                else:
+                    for index,latents in enumerate(latent_list):
+                        new_latents=guidance_and_step(noise_pred_output[index][0],t,latents)
+                        latent_list[index]=new_latents
+                
 
                 if callback_on_step_end is not None:
                     callback_kwargs = {}
@@ -1254,26 +1312,17 @@ def forward_hydra(self:StableDiffusionControlNetPipeline,
                 self.controlnet.to("cpu")
             torch.cuda.empty_cache()
 
-        if not output_type == "latent":
-            image = self.vae.decode(latents / self.vae.config.scaling_factor, return_dict=False, generator=generator)[
-                0
-            ]
-            #image, has_nsfw_concept = self.run_safety_checker(image, device, prompt_embeds.dtype)
+        if hasattr(self.unet,"n_heads") and self.unet.n_heads>1:
+            images=[process_image(latents) for latents in latent_list]
         else:
-            image = latents
-            #has_nsfw_concept = None
-
-        do_denormalize = [True] * image.shape[0]
-
-        image = self.image_processor.postprocess(image, output_type=output_type, do_denormalize=do_denormalize)
-
+            images=process_image(latents)
+        if not return_dict:
+            return (images, None)
+        
         # Offload all models
         self.maybe_free_model_hooks()
 
-        if not return_dict:
-            return (image, None)
-
-        return StableDiffusionPipelineOutput(images=image, nsfw_content_detected=None)
+        return StableDiffusionPipelineOutput(images=images, nsfw_content_detected=None)
 
 
 
