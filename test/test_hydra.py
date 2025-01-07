@@ -27,3 +27,7 @@ class TestHydra(unittest.TestCase):
                                 if use_metadata:
                                     kwargs["metadata"]=metadata
                                 forward_hydra(pipe, **kwargs)
+
+
+if __name__=="__main__":
+    unittest.main()
