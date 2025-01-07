@@ -521,8 +521,9 @@ class HydraMetaDataUnet(MetaDataUnet):
         
         if self.n_heads>1:
             assert isinstance(sample,list)
+            down_block_res_samples_list=[]
             if self.use_hydra_down:
-                down_block_res_samples_list=[]
+                
                 for index,down_blocks in self.down_block_list:
                     new_sample=self.conv_in_list[index](sample[index]) #assume sample=list of tensors
                     down_block_res_samples = (new_sample,)
@@ -562,6 +563,43 @@ class HydraMetaDataUnet(MetaDataUnet):
                             down_block_res_samples = new_down_block_res_samples
                     down_block_res_samples_list.append(down_block_res_samples)
             else:      
+                new_sample=self.conv_in(sample[index]) #assume sample=list of tensors
+                down_block_res_samples = (new_sample,)
+                new_sample=sample
+                for downsample_block in down_blocks:
+                    if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
+                        # For t2i-adapter CrossAttnDownBlock2D
+                        additional_residuals = {}
+                        if is_adapter and len(down_intrablock_additional_residuals) > 0:
+                            additional_residuals["additional_residuals"] = down_intrablock_additional_residuals.pop(0)
+
+                        new_sample, res_samples = downsample_block(
+                            hidden_states=new_sample,
+                            temb=emb,
+                            encoder_hidden_states=encoder_hidden_states,
+                            attention_mask=attention_mask,
+                            cross_attention_kwargs=cross_attention_kwargs,
+                            encoder_attention_mask=encoder_attention_mask,
+                            **additional_residuals,
+                        )
+                    else:
+                        new_sample, res_samples = downsample_block(hidden_states=new_sample, temb=emb)
+                        if is_adapter and len(down_intrablock_additional_residuals) > 0:
+                            sample += down_intrablock_additional_residuals.pop(0)
+
+                    down_block_res_samples += res_samples
+
+                    if is_controlnet:
+                        new_down_block_res_samples = ()
+
+                        for down_block_res_sample, down_block_additional_residual in zip(
+                            down_block_res_samples, down_block_additional_residuals
+                        ):
+                            down_block_res_sample = down_block_res_sample + down_block_additional_residual
+                            new_down_block_res_samples = new_down_block_res_samples + (down_block_res_sample,)
+
+                        down_block_res_samples = new_down_block_res_samples
+                down_block_res_samples_list.append(down_block_res_samples)
         else:
             down_block_res_samples = (sample,)
             for downsample_block in self.down_blocks:
@@ -602,7 +640,7 @@ class HydraMetaDataUnet(MetaDataUnet):
         # 4. mid
         sample_list=[]
         if self.mid_block is not None:
-            if self.n_heads>1 and self.use_hydra_down:
+            if self.n_heads>1:
                 for index,down_block_res_samples in enumerate(down_block_res_samples_list):
                     new_sample=down_block_res_samples[-1]
                     if hasattr(self.mid_block, "has_cross_attention") and self.mid_block.has_cross_attention:
@@ -663,9 +701,12 @@ class HydraMetaDataUnet(MetaDataUnet):
                     new_sample=sample
                 for i, upsample_block in enumerate(up_blocks):
                     is_final_block = i == len(self.up_blocks) - 1
-
-                    res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
-                    down_block_res_samples = down_block_res_samples[: -len(upsample_block.resnets)]
+                    if self.use_hydra_down:
+                        res_samples = down_block_res_samples_list[index][-len(upsample_block.resnets) :]
+                        down_block_res_samples = down_block_res_samples_list[index][: -len(upsample_block.resnets)]
+                    else:
+                        res_samples = down_block_res_samples[-len(upsample_block.resnets) :]
+                        down_block_res_samples = down_block_res_samples[: -len(upsample_block.resnets)]
 
                     # if we have not reached the final block and need to forward the
                     # upsample size, we do it here
