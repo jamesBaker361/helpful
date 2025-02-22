@@ -10,10 +10,6 @@ from numpy.linalg import norm
 from .aesthetic_reward import AestheticScorer
 from transformers import Blip2Processor, Blip2ForConditionalGeneration
 from PIL import Image
-from sentence_transformers import SentenceTransformer
-from sentence_transformers.util import cos_sim as cos_sim_st
-from facenet_pytorch import MTCNN
-from .elastic_face_iresnet import get_face_embedding,get_iresnet_model,face_mask
 from .cloth_network import U2NET
 from .cloth_process import load_seg_model,get_palette,generate_mask
 import wandb
@@ -37,11 +33,6 @@ def get_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen:
         caption_inputs[name]=caption_inputs[name].to(blip_conditional_gen.device)
     caption_out=blip_conditional_gen.generate(**caption_inputs)
     return blip_processor.decode(caption_out[0],skip_special_tokens=True).strip()
-
-def get_face_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen: Blip2ForConditionalGeneration,mtcnn:MTCNN,margin:int)->str:
-    face_image=face_mask(image,mtcnn,margin)
-    #face_image.save(randomword(3)+"_face.jpg")
-    return get_caption(face_image, blip_processor, blip_conditional_gen)
 
 def get_fashion_caption(image:Image,blip_processor: Blip2Processor,blip_conditional_gen: Blip2ForConditionalGeneration,seg_model:U2NET)->str:
     #fashion_image=clothes_segmentation(image,segmentation_model,threshold)
@@ -176,10 +167,6 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
 
     '''src_blip_caption_list=[get_caption(src_image,blip_processor,blip_conditional_gen) for src_image in src_image_list]
     image_blip_caption_list=[get_caption(image,blip_processor,blip_conditional_gen) for image in evaluation_image_list]'''
-    embedding_model = SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True).eval()
-    if accelerator is not None:
-        embedding_model.to(accelerator.device)
-        embedding_model=accelerator.prepare(embedding_model)
     '''src_blip_embedding_list=embedding_model.encode(src_blip_caption_list)
     image_blip_embedding_list=embedding_model.encode(image_blip_caption_list)
     evaluation_blip_embedding_list=embedding_model.encode(evaluation_prompt_list)'''
@@ -251,30 +238,6 @@ def get_metric_dict(evaluation_prompt_list:list, evaluation_image_list:list,src_
         accelerator.free_memory()
 
     torch.cuda.empty_cache()
-
-
-
-    if use_face:
-        '''if accelerator is not None:
-            mtcnn=MTCNN(device=accelerator.device)
-            iresnet=get_iresnet_model(accelerator.device)
-            mtcnn,iresnet=accelerator.prepare(mtcnn,iresnet)
-        else:'''
-        mtcnn=MTCNN(device="cpu") #thinking that maybe these get too big for most GPUs???
-        iresnet=get_iresnet_model("cpu")
-        mtcnn.requires_grad_(False)
-        mtcnn.eval()
-        image_face_embedding_list=[get_face_embedding([evaluation_image],mtcnn,iresnet,10)[0] for evaluation_image in evaluation_image_list]
-        src_face_embedding_list=[get_face_embedding([src_image],mtcnn,iresnet,10)[0] for src_image in src_image_list]
-        face_consistency_list=[]
-        face_target_similarity_list=[]
-        for i,face_embedding in enumerate(image_face_embedding_list):
-            for j,secondary_embedding in enumerate(image_face_embedding_list[i+1:]):
-                face_consistency_list.append(cos_sim(secondary_embedding,face_embedding))
-            for k,src_face_embedding in enumerate(src_face_embedding_list):
-                face_target_similarity_list.append(cos_sim(face_embedding,src_face_embedding))
-        metric_dict[FACE_CONSISTENCY]=np.mean(face_consistency_list)
-        metric_dict[FACE_TARGET_SIMILARITY]=np.mean(face_target_similarity_list)
 
     for metric in METRIC_LIST:
         if metric not in metric_dict:

@@ -396,11 +396,18 @@ class HydraMetaDataUnet(MetaDataUnet):
         forward_upsample_size = False
         upsample_size = None
 
-        for dim in sample.shape[-2:]:
-            if dim % default_overall_up_factor != 0:
-                # Forward upsample size to force interpolation output size.
-                forward_upsample_size = True
-                break
+        if self.n_heads>1:
+            for dim in sample[0].shape[-2:]:
+                if dim % default_overall_up_factor != 0:
+                    # Forward upsample size to force interpolation output size.
+                    forward_upsample_size = True
+                    break
+        else:
+            for dim in sample.shape[-2:]:
+                if dim % default_overall_up_factor != 0:
+                    # Forward upsample size to force interpolation output size.
+                    forward_upsample_size = True
+                    break
 
         # ensure attention_mask is a bias, and give it a singleton query_tokens dimension
         # expects mask of shape:
