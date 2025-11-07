@@ -6,7 +6,7 @@ from accelerate import Accelerator
 WEIGHTS_NAME="diffusion_pytorch_model.safetensors"
 CONFIG_NAME="config.json"
 
-def save(state_dict:dict,e:int,
+def save_state_dict(state_dict:dict,e:int,
          save_path:str,
          config_path:str,
          repo_id:str,
