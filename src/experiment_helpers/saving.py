@@ -31,7 +31,7 @@ def save(state_dict:dict,e:int,
                                 repo_id=repo_id)
         api.upload_file(path_or_fileobj=config_path,path_in_repo=config_name,
                                 repo_id=repo_id)
-        print(f"uploaded {args.name} to hub")
+        print(f"uploaded {repo_id} to hub")
     except Exception as err:
         if accelerator is not None:
             accelerator.print("failed to upload")
