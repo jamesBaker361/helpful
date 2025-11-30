@@ -12,3 +12,7 @@ requires-python = ">=3.8"
 
 [project.urls]
 Homepage = "https://github.com/jamesBaker361/helpful"
+
+
+[tool.setuptools.packages.find]
+where = ["."]
