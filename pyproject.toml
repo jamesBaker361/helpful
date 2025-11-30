@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "experiment-helpers"
+name = "experiment_helpers"
 version = "0.0.97"
 description = "A short description of your package"
 authors = [{name="Your Name", email="you@example.com"}]
