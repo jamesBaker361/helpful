@@ -71,6 +71,24 @@ def get_mnist_model():
     #model.apply(init_weights)
     return model
 
+def get_mnist_autoencoder_model():
+    model= torch.nn.Sequential(*[
+            torch.nn.Conv2d(1,4,4,2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(4,8,4,2),
+            torch.nn.ReLU(),
+            torch.nn.Conv2d(8,16,4,2,),
+            torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(16,8,4,2,),
+            torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(8,4,4,2,output_padding=1),
+            torch.nn.ReLU(),
+            torch.nn.ConvTranspose2d(4,1,4,2,output_padding=0),
+        ])
+    
+    return model
+    
+
 def get_regression_data(batch_size):
     N = 1000      # number of samples
     D_in = 5      # input features
@@ -368,7 +386,78 @@ class TestDecorator(unittest.TestCase):
         
         
         
+    def test_autoencoder_mnist(self):
+        train_loader,val_loader,test_loader=get_mnist_data(2)
         
+        save_dict={
+            "epochs":0
+        }
+            
+        epochs=10
+        val_interval=2
+        limit=2
+        
+        model=get_mnist_autoencoder_model()
+        
+        prior_state_dict={key:value.cpu().detach().clone().numpy() for key,value in model.state_dict().items()}
+        
+        save_path="model_ae.safetensors"
+        
+        def save():
+            save_dict["epochs"]+=1
+            self.accelerator.print("\tsaved epoch ",save_dict["epochs"])
+            torch.save(model.state_dict(),save_path)
+        
+        optimizer=torch.optim.Adam(model.parameters())
+        
+        
+            
+            
+        @optimization_loop(accelerator=self.accelerator,
+                           train_loader=train_loader,
+                           epochs=epochs,
+                           limit=limit,
+                           val_interval=val_interval,
+                           val_loader=val_loader,
+                           test_loader=test_loader,
+                           save_function=save,
+                           #model_list=[model]
+                           )
+        def stub(batch,train:bool,
+                 #model_list:list
+                 ):
+            #model=model_list[0]
+            images,labels=batch
+            
+            images=transforms.Resize((32,32))(images)
+            
+            predicted=model(images)
+            
+            
+            loss=F.mse_loss(predicted,images)
+            
+            if train:
+                loss.backward()
+                optimizer.step()
+                optimizer.zero_grad()
+                
+            return loss.cpu().detach().numpy() #,[model]
+        trained_state_dict={key:value.cpu().detach().numpy() for key,value in model.state_dict().items()}
+        for key,prior_value in prior_state_dict.items():
+            self.assertTrue((prior_value==trained_state_dict[key]).all())
+        stub()
+        trained_state_dict={key:value.cpu().detach().numpy() for key,value in model.state_dict().items()}
+        for key,prior_value in prior_state_dict.items():
+            self.assertFalse((prior_value==trained_state_dict[key]).all())
+            
+        new_model=get_mnist_autoencoder_model()
+        print([k for k in new_model.state_dict().keys()])
+        print([k for k in torch.load(save_path).keys()])
+        new_model.load_state_dict(torch.load(save_path))
+        new_state_dict={key:value.cpu().detach().numpy() for key,value in new_model.state_dict().items()}
+        for key,new_value in new_state_dict.items():
+            self.assertTrue((new_value==trained_state_dict[key]).all())
+        self.accelerator.print("\n")
             
 
         
